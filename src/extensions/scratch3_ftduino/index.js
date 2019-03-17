@@ -89,7 +89,43 @@ const blockIconURI = 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNv
  * @constructor
  */
 
+const FTDUINO_BUTTON_ID = "ftDuino_connect_button";
+const PARENT_CLASS = "controls_controls-container_2xinB"
+
 class Scratch3FtduinoBlocks {
+    connectClicked() {
+	alert("Clicked connect");
+	this.manualConnect();
+    }
+    
+    removeConnectButton() {
+	button = document.getElementById(FTDUINO_BUTTON_ID);
+	if(button != undefined)
+	    button.parentNode.removeChild(button);
+    }
+	
+    addConnectButton() {
+	//  check if the button already exists
+	button = document.getElementById(FTDUINO_BUTTON_ID);
+
+	if(button == undefined) {
+	    console.log("ftDuino: Adding connect button");
+	
+	    x = document.getElementsByClassName(PARENT_CLASS);
+	    if(x.length > 0) {
+		hdrdiv = x[0];
+		console.log(hdrdiv);
+	    
+		hdrdiv.innerHTML += '<button id="'+
+		    FTDUINO_BUTTON_ID+'" type="button">Connect</button>';
+
+		button = document.getElementById(FTDUINO_BUTTON_ID);
+		button.onclick = this.connectClicked.bind(this);
+	    } else
+		alert("ftDuino: controls-container class not found!");
+	}
+    }
+    
     constructor (runtime) {
 	this.debug = false;
 
@@ -106,7 +142,8 @@ class Scratch3FtduinoBlocks {
 	    });
 
 	    // TODO: try to autoconnect first
-	    this.manualConnect();
+	    // this.manualConnect();
+	    this.autoConnect();
 
 	} else
 	    alert("No USB support on this browser. Please use Google Chrome or a related browser.");
@@ -231,6 +268,9 @@ class Scratch3FtduinoBlocks {
     ftdCheckVersionCallback(ver) {
 	// enable run button after successful connection
 	console.log("ftDuino setup completed");
+
+	// remove any connect button that may be there
+	this.removeConnectButton();
 
 	// use a timer to frequently poll the inputs and
 	// update the outputs
@@ -375,12 +415,11 @@ class Scratch3FtduinoBlocks {
 		console.log("Ports" + ports);
 		
 		if (ports.length == 0) {
-		    console.log("No ftDuino found.");
+		    console.log("ftDuino: No paired device found!");
+		    this.addConnectButton();
 		} else {
 		    // at least one device found. Connect to first one
-		    // ftduino.port = ports[0];    
-
-		    alert("ftDuino found");
+		    this.connect(ports[0]);
 		}
             } ); 
 	} catch (e) {
