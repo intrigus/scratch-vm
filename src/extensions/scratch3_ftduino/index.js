@@ -160,7 +160,6 @@ class Scratch3FtduinoBlocks {
 	    x = document.getElementsByClassName(PARENT_CLASS);
 	    if(x.length > 0) {
 		hdrdiv = x[0];
-		console.log(hdrdiv);
 	    
 		hdrdiv.innerHTML += '<img class="green-flag_green-flag_1kiAo" '+
 		    'draggable="false" id="'+
@@ -240,8 +239,6 @@ class Scratch3FtduinoBlocks {
 
     ftdGet(item = null, callback = null) {
 	if(this.port == null) return;
-	
-	// console.log("get", item, callback);
 	
 	if(item) {
             this.callback = callback;
@@ -574,6 +571,10 @@ class Scratch3FtduinoBlocks {
     }
     
     led (args) {
+	// check if ftDuino is connected at all
+	if((this.port === undefined) || (this.port == null))
+	    return;
+	
 	new_state = Cast.toBoolean(args.VALUE);
 	if(new_state != this.poll_state_led) {
 	    this.poll_state_led = new_state;
@@ -582,11 +583,19 @@ class Scratch3FtduinoBlocks {
     }
 	
     input (args) {
+	// check if ftDuino is connected at all
+	if((this.port === undefined) || (this.port == null))
+	    return false;
+	
 	port = Cast.toNumber(args.INPUT.substr(1))-1;
 	return this.poll_state_input[port];
     }
 	
     output (args) {
+	// check if ftDuino is connected at all
+	if((this.port === undefined) || (this.port == null))
+	    return;
+
 	port = Cast.toNumber(args.OUTPUT.substr(1))-1;
 	new_state = Cast.toBoolean(args.VALUE);
 	if(new_state != this.poll_state_output[port]) {
