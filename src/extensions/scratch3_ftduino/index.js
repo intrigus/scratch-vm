@@ -161,10 +161,13 @@ class Scratch3FtduinoBlocks {
 	    if(x.length > 0) {
 		hdrdiv = x[0];
 	    
-		hdrdiv.innerHTML += '<img class="green-flag_green-flag_1kiAo" '+
-		    'draggable="false" id="'+
-		    FTDUINO_BUTTON_ID+
-		    '" src="' + ftduinoNoWebUSBIcon + '" />';
+		img = document.createElement("IMG");
+		img.classList.add("green-flag_green-flag_1kiAo");
+		img.setAttribute("draggable", false);
+		img.setAttribute("id", FTDUINO_BUTTON_ID);
+		img.setAttribute("src", ftduinoNoWebUSBIcon);
+		
+		hdrdiv.appendChild(img);
 	    } else
 		alert("ftDuino: controls-container class not found!");
 	}
