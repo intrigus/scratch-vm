@@ -1,10 +1,17 @@
+/*
+  scratch3_ftduino/index.js
+
+  WebUSB based ftDuino extension for scratch3
+
+  (c) 2019 by Till Harbaum <till@harbaum.org>
+
+  http://ftduino.de
+*/
+
 const formatMessage = require('format-message');
 const ArgumentType = require('../../extension-support/argument-type');
 const BlockType = require('../../extension-support/block-type');
 const Cast = require('../../util/cast');
-
-// ToDo:
-// - try to connect automatically
 
 // a set of very simple routines giving access to the ftDuinos serial USB port
 var serial = {};
@@ -175,16 +182,16 @@ class Scratch3FtduinoBlocks {
     
     constructor (runtime) {
 	this.debug = false;
+	this.port == null;
 	state = STATE.NOWEBUSB;
 
 	// place icon
 	this.addButton(STATE.NOWEBUSB);
-	
+
 	if(navigator.usb) {
 	    this.textEncoder = new TextEncoder();   
 	    console.log("WebUSB supported!");
 	    navigator.usb.addEventListener('connect', event => {
-//		alert("New USB Connect!");
 		this.autoConnect();
 	    });
 	    
@@ -228,7 +235,7 @@ class Scratch3FtduinoBlocks {
     ftdSetOutput(port,pwm)      { this.ftdSet({ port: port, mode: "HI", value: pwm }); }
    
     ftdReq(req) {
-	if ((this.port !== undefined) && (this.port != null)) {
+	if (this.port != null) {
             if(this.debug) console.log("TX:" + req);
             p = this.port.send(this.textEncoder.encode(req));
             p.then(
@@ -498,6 +505,7 @@ class Scratch3FtduinoBlocks {
             id: 'ftduino',
             name: 'ftDuino',
             blockIconURI: blockIconURI,
+	    docsURI: 'http://ftduino.de',
             blocks: [
 		{
 		    opcode: 'led',
@@ -555,7 +563,8 @@ class Scratch3FtduinoBlocks {
             ],
             menus: {
                 ONOFFSTATE: [
-		    {text: 'On', value:  '1'}, {text: 'Off', value: '0' }
+		    { text: formatMessage({id: 'ftduino.on', default: 'On' }), value: '1'},
+		    { text: formatMessage({id: 'ftduino.off',default: 'Off'}), value: '0' }
 		],
                 INPUT: [
 		    {text: 'I1', value: 'i1'}, {text: 'I2', value: 'i2'},
@@ -569,14 +578,25 @@ class Scratch3FtduinoBlocks {
 		    {text: 'O5', value: 'o5'}, {text: 'O6', value: 'o6'},
 		    {text: 'O7', value: 'o7'}, {text: 'O8', value: 'o8'}
                 ]
-            }
+            },
+            translation_map: {
+		en: {
+		    'extensionName': 'ftDuino (en)',
+                    'input': 'input [INPUT]',
+                    'ftduino.input': 'input [INPUT]',
+		},
+		de: {
+		    'extensionName': 'ftDuino (de)',
+                    'input': 'Eingang [INPUT]',
+                    'ftduino.input': 'Eingang [INPUT]',
+		}
+	    }		
         };
     }
     
     led (args) {
 	// check if ftDuino is connected at all
-	if((this.port === undefined) || (this.port == null))
-	    return;
+	if(this.port == null) return;
 	
 	new_state = Cast.toBoolean(args.VALUE);
 	if(new_state != this.poll_state_led) {
@@ -587,8 +607,7 @@ class Scratch3FtduinoBlocks {
 	
     input (args) {
 	// check if ftDuino is connected at all
-	if((this.port === undefined) || (this.port == null))
-	    return false;
+	if(this.port == null) return false;
 	
 	port = Cast.toNumber(args.INPUT.substr(1))-1;
 	return this.poll_state_input[port];
@@ -596,8 +615,7 @@ class Scratch3FtduinoBlocks {
 	
     output (args) {
 	// check if ftDuino is connected at all
-	if((this.port === undefined) || (this.port == null))
-	    return;
+	if(this.port == null) return;
 
 	port = Cast.toNumber(args.OUTPUT.substr(1))-1;
 	new_state = Cast.toBoolean(args.VALUE);
