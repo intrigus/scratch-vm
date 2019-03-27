@@ -106,6 +106,7 @@ const STATE = { NOWEBUSB:0, DISCONNECTED:1, CONNECTED:2 };
 
 const FTDUINO_BUTTON_ID = "ftDuino_connect_button";
 const PARENT_CLASS = "controls_controls-container_2xinB"
+const EXTENSION_ID = 'ftduino';
 
 class Scratch3FtduinoBlocks {
     onConnectClicked() {
@@ -213,6 +214,14 @@ class Scratch3FtduinoBlocks {
          * @type {Runtime}
          */
         this.runtime = runtime;
+
+
+	this.runtime.registerPeripheralExtension(EXTENSION_ID, this);
+
+//        this.disconnect = this.disconnect.bind(this);
+//        this._onConnect = this._onConnect.bind(this);
+//        this._onMessage = this._onMessage.bind(this);
+//        this._pollValues = this._pollValues.bind(this);
     }
 
     manualConnect() {
@@ -496,15 +505,59 @@ class Scratch3FtduinoBlocks {
 	    this.setButton(STATE.NOWEBUSB, e);
 	}
     }
+
+    connect () { console.log("connect"); } 
+    disconnect () { console.log("disconnect"); } 
+
+    scan_done() {
+	// scratch-gui/src/lib/libraries/extensions/index.jsx
+	// scratch-gui/src/components/connection-modal/scanning-step.jsx
+	// scratch-vm/src/io/bt.js
+	params = {}
+	params.peripheralId = "ftDuino #1";
+	params.name = "ftDuino #1";
+	params.rssi = 12;
+	
+	this.devices = { };
+	this.devices[params.peripheralId] = params;
+	
+	console.log("add");
+	this.runtime.emit(
+            this.runtime.constructor.PERIPHERAL_LIST_UPDATE, this.devices);
+
+	// alternally emit error
+	// this.runtime.emit(this.runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
+	//            message: `Scratch lost connection to`,
+	//            extensionId: EXTENSION_ID
+	//        });
+	
+	// this.runtime.emit(this.runtime.constructor.PERIPHERAL_SCAN_TIMEOUT);
+    }
     
+    // how to report the result?
+    scan () {
+	console.log("SCAN!!!");
+
+	// schedule retransmission
+	setTimeout(this.scan_done.bind(this), 1000);
+	
+    }
+    
+    isConnected () {
+	console.log("isconnected");
+	return false;
+    }
+	
     /**
      * @returns {object} metadata for this extension and its blocks.
      */
     getInfo () {
         return {
-            id: 'ftduino',
+            id: EXTENSION_ID,
             name: 'ftDuino',
             blockIconURI: blockIconURI,
+            connectionIconURL: blockIconURI,  // should be different ...
+	    showStatusButton: true,
 	    docsURI: 'http://ftduino.de',
             blocks: [
 		{
