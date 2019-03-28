@@ -215,13 +215,7 @@ class Scratch3FtduinoBlocks {
          */
         this.runtime = runtime;
 
-
-	this.runtime.registerPeripheralExtension(EXTENSION_ID, this);
-
-//        this.disconnect = this.disconnect.bind(this);
-//        this._onConnect = this._onConnect.bind(this);
-//        this._onMessage = this._onMessage.bind(this);
-//        this._pollValues = this._pollValues.bind(this);
+	// this.runtime.registerPeripheralExtension(EXTENSION_ID, this);
     }
 
     manualConnect() {
@@ -350,6 +344,9 @@ class Scratch3FtduinoBlocks {
 	// make button indicate that we are now connected
 	this.setButton(STATE.CONNECTED);
 
+	// no IO pending yet
+	this.pending = null;  
+	    
 	// use a timer to frequently poll the inputs and
 	// update the outputs
 	this.poll_state_input  = [ false,false,false,false,false,false,false,false ];
@@ -506,6 +503,9 @@ class Scratch3FtduinoBlocks {
 	}
     }
 
+    // ------------------------ the following will only be used if ------------------
+    // ------------------------ "showStatusButton: true," is set --------------------
+    
     connect () { console.log("connect"); } 
     disconnect () { console.log("disconnect"); } 
 
@@ -513,6 +513,8 @@ class Scratch3FtduinoBlocks {
 	// scratch-gui/src/lib/libraries/extensions/index.jsx
 	// scratch-gui/src/components/connection-modal/scanning-step.jsx
 	// scratch-vm/src/io/bt.js
+
+	// this reports a dummy device 1 second after the search has been triggered
 	params = {}
 	params.peripheralId = "ftDuino #1";
 	params.name = "ftDuino #1";
@@ -520,32 +522,34 @@ class Scratch3FtduinoBlocks {
 	
 	this.devices = { };
 	this.devices[params.peripheralId] = params;
-	
-	console.log("add");
+
+	// without webusb support we'd like to report an error. Unfortunately
+	// this results in some "scratchlink not installed/bluetooth disabled" message
+	// which is totally useless for webusb
+	if(state == STATE.NOWEBUSB) {
+	    this.runtime.emit(this.runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
+	        message: `No WebUSB support!`,
+		extensionId: EXTENSION_ID
+	    });
+	    return;
+	}
+	    
 	this.runtime.emit(
             this.runtime.constructor.PERIPHERAL_LIST_UPDATE, this.devices);
 
-	// alternally emit error
-	// this.runtime.emit(this.runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
-	//            message: `Scratch lost connection to`,
-	//            extensionId: EXTENSION_ID
-	//        });
-	
+	// alternally emit error	
 	// this.runtime.emit(this.runtime.constructor.PERIPHERAL_SCAN_TIMEOUT);
     }
     
-    // how to report the result?
     scan () {
-	console.log("SCAN!!!");
-
-	// schedule retransmission
-	setTimeout(this.scan_done.bind(this), 1000);
-	
+	// this should trigger some kind of search
+	setTimeout(this.scan_done.bind(this), 1000);	
     }
     
     isConnected () {
+	// scratch-vm/node_modules/scratch-blocks/core/flyout_extension_category_header.js
 	console.log("isconnected");
-	return false;
+	return true;
     }
 	
     /**
@@ -556,8 +560,7 @@ class Scratch3FtduinoBlocks {
             id: EXTENSION_ID,
             name: 'ftDuino',
             blockIconURI: blockIconURI,
-            connectionIconURL: blockIconURI,  // should be different ...
-	    showStatusButton: true,
+//	    showStatusButton: true,             // enable this for the status button
 	    docsURI: 'http://ftduino.de',
             blocks: [
 		{
@@ -650,6 +653,11 @@ class Scratch3FtduinoBlocks {
     led (args) {
 	// check if ftDuino is connected at all
 	if(this.port == null) return;
+
+	// todo: sync handling with
+	
+	// if(this.pending == null) {}
+	// util.yield();
 	
 	new_state = Cast.toBoolean(args.VALUE);
 	if(new_state != this.poll_state_led) {
