@@ -6,6 +6,10 @@
   (c) 2019 by Till Harbaum <till@harbaum.org>
 
   http://ftduino.de
+
+  About this extension:
+  - 
+
 */
 
 const formatMessage = require('format-message');
@@ -103,6 +107,8 @@ const ftduinoNoWebUSBIcon = 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wI
  */
 
 const STATE = { NOWEBUSB:0, DISCONNECTED:1, CONNECTED:2 };
+const IOSTATE = { IDLE:0, MODE: 1, IN:2, OUT:3, REPLY:4, DONE:5 };
+const MODE = { SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance" };
 
 const FTDUINO_BUTTON_ID = "ftDuino_connect_button";
 const PARENT_CLASS = "controls_controls-container_2xinB"
@@ -236,6 +242,7 @@ class Scratch3FtduinoBlocks {
     
     ftdSetLed(state)            { this.ftdSet({ port: "led", value: state }); }
     ftdSetOutput(port,pwm)      { this.ftdSet({ port: port, mode: "HI", value: pwm }); }
+    ftdSetMode(port,mode)       { this.ftdSet({ port: port, mode: mode }); }
    
     ftdReq(req) {
 	if (this.port != null) {
@@ -243,13 +250,28 @@ class Scratch3FtduinoBlocks {
             p = this.port.send(this.textEncoder.encode(req));
             p.then(
 		function(val) {
+		    // a out transfer is now done, a in transfer expects a reply
+		    if(this.iostate == IOSTATE.OUT)
+			this.iostate = IOSTATE.DONE;
+		    else if(this.iostate == IOSTATE.IN)
+			this.iostate = IOSTATE.REPLY;
+		    else if(this.iostate == IOSTATE.MODE) {
+			console.log("mode changed, requesting input for", this.iostate_port);
+			this.iostate = IOSTATE.IN;
+			// 
+			this.ftdGet({ "port": this.iostate_port },
+				    { "func": this.inputCallback.bind(this),
+				      "value": "value",
+				      "expect": { "port": this.iostate_port } });
+		    }
+
 		    if(this.debug)
 			console.log("PROMISE fulfilled: "+ val.bytesWritten + " " + val.status);
-		}
+		}.bind(this)
             );
 	}
     }
-
+    
     ftdGet(item = null, callback = null) {
 	if(this.port == null) return;
 	
@@ -264,79 +286,6 @@ class Scratch3FtduinoBlocks {
 	this.reply_timeout = setTimeout(this.ftdGet.bind(this), 1000);
     }
 
-    ftdPollerCallback(v) {
-	// this happens if the user clicked "disconnect"
-	// we then just stop polling
-	if(this.port == null) 
-	    return;
-	
-	this.poll_state_input[this.poll_count] = Cast.toBoolean(v);
-
-	// handle next input
-	this.poll_count = this.poll_count + 1
-	
-	// next poller run in 2ms
-	setTimeout(this.ftdPoller.bind(this), 2);
-    }
-	
-    ftdPoller() {
-	// poll count runs from 0 to 16. These mean
-	// 0..7 = read inputs i1-i8
-	// 8..15 = update outputs o1-o8 (if needed)
-	// 16 = update led if needed
-
-	while(this.poll_count > 7) {
-	    if(this.poll_count <= 15) {
-		// check for pending output updates
-		this.poll_count++;
-
-		// check for pending led update, counter is
-		// now 9..16
-		if(this.poll_update_output[this.poll_count-9]) {
-		    port = "O"+(this.poll_count-8).toString();
-		    // send new state
-		    this.ftdSetOutput(port, this.poll_state_output[this.poll_count-9]);
-		    // clear update flag
-		    this.poll_update_output[this.poll_count-9] = false;
-
-		    // next poller run in 10ms
-		    setTimeout(this.ftdPoller.bind(this), 10);
-		    
-		    return;
-		}
-	    } else {
-		// next handle input i1
-		this.poll_count = 0;
-		
-		// check for pending led update
-		if(this.poll_update_led) {
-		    
-		    // send new state
-		    this.ftdSetLed(this.poll_state_led);
-		    // clear update flag
-		    this.poll_update_led = false;
-
-		    // next poller run in 10ms
-		    setTimeout(this.ftdPoller.bind(this), 10);
-		    
-		    return;
-		}
-	    }
-	}
-	    
-	if((this.poll_count >= 0) && (this.poll_count <= 7)) {	
-	    port = "I"+(this.poll_count+1).toString();
-	    this.ftdGet({ port: port },
-			{ "func": this.ftdPollerCallback.bind(this),
-			  "value": "value",
-			  "expect": { "port": port } });
-	}
-	
-	
-	// TODO: start another timout so we can deal with the
-	// fact that a request or reply may get lost
-    }
-    
     ftdCheckVersionCallback(ver) {
 	// enable run button after successful connection
 	console.log("ftDuino setup completed");
@@ -345,23 +294,10 @@ class Scratch3FtduinoBlocks {
 	this.setButton(STATE.CONNECTED);
 
 	// no IO pending yet
-	this.pending = null;  
-	    
-	// use a timer to frequently poll the inputs and
-	// update the outputs
-	this.poll_state_input  = [ false,false,false,false,false,false,false,false ];
-	this.poll_state_output = [ false,false,false,false,false,false,false,false ];
-	this.poll_state_led = false;
+	this.iostate = IOSTATE.IDLE;
 
-	// keep state of those outputs that need to be updated
-	this.poll_update_output = [ false,false,false,false,false,false,false,false ];
-	this.poll_update_led = false;
-
-	// counter running over all inputs and outputs
-	this.poll_count = 0;
-
-	// start polling in 100ms
-	setTimeout(this.ftdPoller.bind(this), 100);
+	this.input_mode = { "i1":MODE.SWITCH, "i2":MODE.SWITCH, "i3":MODE.SWITCH, "i4":MODE.SWITCH,
+			    "i5":MODE.SWITCH, "i6":MODE.SWITCH, "i7":MODE.SWITCH, "i8":MODE.SWITCH }
     }
 
     ftdCheckVersion() {
@@ -380,7 +316,7 @@ class Scratch3FtduinoBlocks {
 	// if there's a pending callback
 	if(this.callback) {
 	    var reply_ok = true;
-    
+
 	    // check if all expected entries are in this reply (e.g. correct port)
 	    if(this.callback["expect"]) {
 		// iterate over all expected keys
@@ -506,8 +442,8 @@ class Scratch3FtduinoBlocks {
     // ------------------------ the following will only be used if ------------------
     // ------------------------ "showStatusButton: true," is set --------------------
     
-    connect () { console.log("connect"); } 
-    disconnect () { console.log("disconnect"); } 
+    // connect () { console.log("connect"); } 
+    // disconnect () { console.log("disconnect"); } 
 
     scan_done() {
 	// scratch-gui/src/lib/libraries/extensions/index.jsx
@@ -567,7 +503,7 @@ class Scratch3FtduinoBlocks {
 		    opcode: 'led',
 		    text: formatMessage({
                         id: 'ftduino.led',
-                        default: 'set LED [VALUE]',
+                        default: 'LED [VALUE]',
                         description: 'set the ftDuino led'
                     }),
                     blockType: BlockType.COMMAND,
@@ -583,7 +519,7 @@ class Scratch3FtduinoBlocks {
 		    opcode: 'input',
 		    text: formatMessage({
                         id: 'ftduino.input',
-                        default: 'input [INPUT]',
+                        default: '[INPUT]',
                         description: 'read an ftDuino input'
                     }),
                     blockType: BlockType.BOOLEAN,
@@ -591,7 +527,28 @@ class Scratch3FtduinoBlocks {
                         INPUT: {
                             type: ArgumentType.STRING,
                             menu: 'INPUT',
-                            defaultValue: 'I1'
+                            defaultValue: 'i1'
+                        }
+                    }
+		},
+		{
+		    opcode: 'input_analog',
+		    text: formatMessage({
+                        id: 'ftduino.input_analog',
+                        default: '[MODE] on [INPUT]',
+                        description: 'read an ftDuino input'
+                    }),
+                    blockType: BlockType.REPORTER,
+                    arguments: {
+                        MODE: {
+                            type: ArgumentType.STRING,
+                            menu: 'MODE',
+                            defaultValue: MODE.RESISTANCE
+                        },
+                        INPUT: {
+                            type: ArgumentType.STRING,
+                            menu: 'INPUT',
+                            defaultValue: 'i1'
                         }
                     }
 		},
@@ -599,7 +556,7 @@ class Scratch3FtduinoBlocks {
 		    opcode: 'output',
 		    text: formatMessage({
                         id: 'ftduino.output',
-                        default: 'set output [OUTPUT] to [VALUE]',
+                        default: 'output [OUTPUT] to [VALUE]',
                         description: 'set an ftDuino output'
                     }),
                     blockType: BlockType.COMMAND,
@@ -607,12 +564,12 @@ class Scratch3FtduinoBlocks {
                         OUTPUT: {
                             type: ArgumentType.STRING,
                             menu: 'OUTPUT',
-                            defaultValue: 'O1'
+                            defaultValue: 'o1'
                         },
 			VALUE: {
                             type: ArgumentType.STRING,
                             menu: 'ONOFFSTATE',
-                            defaultValue: 'On'
+                            defaultValue: '1'
                         }
                     }
 		}
@@ -621,6 +578,9 @@ class Scratch3FtduinoBlocks {
                 ONOFFSTATE: [
 		    { text: formatMessage({id: 'ftduino.on', default: 'On' }), value: '1'},
 		    { text: formatMessage({id: 'ftduino.off',default: 'Off'}), value: '0' }
+		],
+                MODE: [
+		    {text: 'Ohms', value: MODE.RESISTANCE }, {text: 'Volt', value: MODE.VOLTAGE }
 		],
                 INPUT: [
 		    {text: 'I1', value: 'i1'}, {text: 'I2', value: 'i2'},
@@ -650,41 +610,102 @@ class Scratch3FtduinoBlocks {
         };
     }
     
-    led (args) {
+    led (args, util) {
 	// check if ftDuino is connected at all
 	if(this.port == null) return;
 
-	// todo: sync handling with
-	
-	// if(this.pending == null) {}
-	// util.yield();
-	
-	new_state = Cast.toBoolean(args.VALUE);
-	if(new_state != this.poll_state_led) {
-	    this.poll_state_led = new_state;
-	    this.poll_update_led = true;      // led needs update 
-	}
+	if(this.iostate == IOSTATE.IDLE) {
+	    this.iostate = IOSTATE.OUT;
+	    this.ftdSetLed(Cast.toBoolean(args.VALUE));
+	    util.yield();
+	} else if(this.iostate == IOSTATE.OUT)
+	    util.yield();
+	else if(this.iostate == IOSTATE.DONE)
+	    this.iostate = IOSTATE.IDLE;
     }
 	
-    input (args) {
+    inputCallback (v) {
+	if(this.input_mode[this.iostate_port] == MODE.SWITCH)
+	    this.input_result = Cast.toBoolean(v);
+	else
+	    this.input_result = Cast.toNumber(v);
+	
+	this.iostate = IOSTATE.DONE;
+    }
+	
+    input (args, util) {
+	// check if ftDuino is connected at all
+	if(this.port == null) return false;
+
+	if(this.iostate == IOSTATE.IDLE) {
+	    if(MODE.SWITCH != this.input_mode[args.INPUT]) {
+		console.log("change mode", this.input_mode[args.INPUT], MODE.SWITCH);
+
+		this.iostate == IOSTATE.MODE;
+		this.iostate_port = args.INPUT;
+		this.input_mode[args.INPUT] = MODE.SWITCH;
+		this.ftdSetMode(args.INPUT, MODE.SWITCH);
+	    } else {
+		this.iostate = IOSTATE.IN;
+		this.iostate_port = args.INPUT;
+		this.ftdGet({ "port": args.INPUT },
+			    { "func": this.inputCallback.bind(this),
+			      "value": "value",
+			      "expect": { "port": args.INPUT } });
+	    }
+	    util.yield();
+	} else if((this.iostate == IOSTATE.MODE) ||
+		  (this.iostate == IOSTATE.IN) || (this.iostate == IOSTATE.REPLY))
+	    util.yield();
+	else if(this.iostate == IOSTATE.DONE)
+	    this.iostate = IOSTATE.IDLE;
+
+	return this.input_result;
+    }
+	
+    input_analog (args, util) {
 	// check if ftDuino is connected at all
 	if(this.port == null) return false;
 	
-	port = Cast.toNumber(args.INPUT.substr(1))-1;
-	return this.poll_state_input[port];
+	if(this.iostate == IOSTATE.IDLE) {
+	    if(args.MODE != this.input_mode[args.INPUT]) {
+		console.log("change mode", this.input_mode[args.INPUT], args.MODE);
+
+		this.iostate == IOSTATE.MODE;
+		this.iostate_port = args.INPUT;
+		this.input_mode[args.INPUT] = args.MODE;
+		this.ftdSetMode(args.INPUT, args.MODE);
+	    } else {
+		this.iostate = IOSTATE.IN;
+		this.iostate_port = args.INPUT;
+		this.ftdGet({ "port": args.INPUT },
+			    { "func": this.inputCallback.bind(this),
+			      "value": "value",
+			      "expect": { "port": args.INPUT } });
+	    }
+	    util.yield();
+	} else if((this.iostate == IOSTATE.MODE) ||
+		  (this.iostate == IOSTATE.IN) || (this.iostate == IOSTATE.REPLY))
+	    util.yield();
+	else if(this.iostate == IOSTATE.DONE)
+	    this.iostate = IOSTATE.IDLE;
+	
+	return this.input_result;
     }
 	
-    output (args) {
+    output (args, util) {
 	// check if ftDuino is connected at all
 	if(this.port == null) return;
 
-	port = Cast.toNumber(args.OUTPUT.substr(1))-1;
-	new_state = Cast.toBoolean(args.VALUE);
-	if(new_state != this.poll_state_output[port]) {
-	    this.poll_state_output[port] = new_state;
-	    this.poll_update_output[port] = true;      // output needs update 
-	}
+	if(this.iostate == IOSTATE.IDLE) {
+	    this.iostate = IOSTATE.OUT;
+	    this.ftdSetOutput(args.OUTPUT, Cast.toBoolean(args.VALUE));
+	    util.yield();
+	} else if(this.iostate == IOSTATE.OUT)
+	    util.yield();
+	else if(this.iostate == IOSTATE.DONE)
+	    this.iostate = IOSTATE.IDLE;
     }
-
 }
+
 module.exports = Scratch3FtduinoBlocks;
