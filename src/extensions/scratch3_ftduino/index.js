@@ -108,7 +108,7 @@ const ftduinoNoWebUSBIcon = 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wI
 
 const STATE = { NOWEBUSB:0, DISCONNECTED:1, CONNECTED:2 };
 const IOSTATE = { IDLE:0, MODE: 1, IN:2, OUT:3, REPLY:4, DONE:5 };
-const MODE = { SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance" };
+const MODE = { UNSPEC:"unspecified", SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance" };
 
 const FTDUINO_BUTTON_ID = "ftDuino_connect_button";
 const PARENT_CLASS = "controls_controls-container_2xinB"
@@ -242,6 +242,7 @@ class Scratch3FtduinoBlocks {
     
     ftdSetLed(state)            { this.ftdSet({ port: "led", value: state }); }
     ftdSetOutput(port,pwm)      { this.ftdSet({ port: port, mode: "HI", value: pwm }); }
+    ftdSetMotor(port,dir,pwm)   { this.ftdSet({ port: port, mode: dir, value: pwm }); }
     ftdSetMode(port,mode)       { this.ftdSet({ port: port, mode: mode }); }
    
     ftdReq(req) {
@@ -296,8 +297,9 @@ class Scratch3FtduinoBlocks {
 	// no IO pending yet
 	this.iostate = IOSTATE.IDLE;
 
-	this.input_mode = { "i1":MODE.SWITCH, "i2":MODE.SWITCH, "i3":MODE.SWITCH, "i4":MODE.SWITCH,
-			    "i5":MODE.SWITCH, "i6":MODE.SWITCH, "i7":MODE.SWITCH, "i8":MODE.SWITCH }
+	// current input modes
+	this.input_mode = { "i1":MODE.UNSPEC, "i2":MODE.UNSPEC, "i3":MODE.UNSPEC, "i4":MODE.UNSPEC,
+			    "i5":MODE.UNSPEC, "i6":MODE.UNSPEC, "i7":MODE.UNSPEC, "i8":MODE.UNSPEC }
     }
 
     ftdCheckVersion() {
@@ -503,7 +505,7 @@ class Scratch3FtduinoBlocks {
 		    opcode: 'led',
 		    text: formatMessage({
                         id: 'ftduino.led',
-                        default: 'LED [VALUE]',
+                        default: 'LED [VALUE]',  // \u26ef
                         description: 'set the ftDuino led'
                     }),
                     blockType: BlockType.COMMAND,
@@ -532,31 +534,10 @@ class Scratch3FtduinoBlocks {
                     }
 		},
 		{
-		    opcode: 'input_analog',
-		    text: formatMessage({
-                        id: 'ftduino.input_analog',
-                        default: '[MODE] on [INPUT]',
-                        description: 'read an ftDuino input'
-                    }),
-                    blockType: BlockType.REPORTER,
-                    arguments: {
-                        MODE: {
-                            type: ArgumentType.STRING,
-                            menu: 'MODE',
-                            defaultValue: MODE.RESISTANCE
-                        },
-                        INPUT: {
-                            type: ArgumentType.STRING,
-                            menu: 'INPUT',
-                            defaultValue: 'i1'
-                        }
-                    }
-		},
-		{
 		    opcode: 'output',
 		    text: formatMessage({
                         id: 'ftduino.output',
-                        default: 'output [OUTPUT] to [VALUE]',
+                        default: '[OUTPUT] [VALUE]',
                         description: 'set an ftDuino output'
                     }),
                     blockType: BlockType.COMMAND,
@@ -572,6 +553,94 @@ class Scratch3FtduinoBlocks {
                             defaultValue: '1'
                         }
                     }
+		},
+		'---',
+		{
+		    opcode: 'input_analog',
+		    text: formatMessage({
+                        id: 'ftduino.input_analog',
+                        default: '[INPUT] [MODE]',
+                        description: 'read an ftDuino input'
+                    }),
+                    blockType: BlockType.REPORTER,
+                    arguments: {
+                        INPUT: {
+                            type: ArgumentType.STRING,
+                            menu: 'INPUT',
+                            defaultValue: 'i1'
+			},
+                        MODE: {
+                            type: ArgumentType.STRING,
+                            menu: 'MODE',
+                            defaultValue: MODE.RESISTANCE
+                        }
+                    }
+		},
+		{
+		    opcode: 'output_analog',
+		    text: formatMessage({
+                        id: 'ftduino.output_analog',
+                        default: '[OUTPUT] [VALUE] %',
+                        description: 'set an ftDuino output'
+                    }),
+                    blockType: BlockType.COMMAND,
+                    arguments: {
+                        OUTPUT: {
+                            type: ArgumentType.STRING,
+                            menu: 'OUTPUT',
+                            defaultValue: 'o1'
+                        },
+			VALUE: {
+                            type: ArgumentType.NUMBER,
+                            defaultValue: '100'
+                        }
+                    }
+		},
+		{
+		    opcode: 'motor',
+		    text: formatMessage({
+                        id: 'ftduino.motor',
+                        default: '[MOTOR] [DIR] [VALUE] %',
+                        description: 'set an ftDuino motor output'
+                    }),
+                    blockType: BlockType.COMMAND,
+                    arguments: {
+                        MOTOR: {
+                            type: ArgumentType.STRING,
+                            menu: 'MOTOR',
+                            defaultValue: 'm1'
+                        },
+                        DIR: {
+                            type: ArgumentType.STRING,
+                            menu: 'DIR',
+                            defaultValue: 'left'
+                        },
+			VALUE: {
+                            type: ArgumentType.NUMBER,
+                            defaultValue: '100'
+                        }
+                    }
+		},
+		{
+		    opcode: 'motor_stop',
+		    text: formatMessage({
+                        id: 'ftduino.motor_stop',
+                        default: '[MOTOR] [STOPMODE]',
+                        description: 'stop an ftDuino motor output'
+                    }),
+                    blockType: BlockType.COMMAND,
+                    arguments: {
+                        MOTOR: {
+                            type: ArgumentType.STRING,
+                            menu: 'MOTOR',
+                            defaultValue: 'm1'
+                        },
+                        STOPMODE: {
+                            type: ArgumentType.STRING,
+                            menu: 'STOPMODE',
+                            defaultValue: 'off'
+                        }
+                    }
 		}
             ],
             menus: {
@@ -580,7 +649,7 @@ class Scratch3FtduinoBlocks {
 		    { text: formatMessage({id: 'ftduino.off',default: 'Off'}), value: '0' }
 		],
                 MODE: [
-		    {text: 'Ohms', value: MODE.RESISTANCE }, {text: 'Volt', value: MODE.VOLTAGE }
+		    {text: '\u2126', value: MODE.RESISTANCE }, {text: 'V', value: MODE.VOLTAGE }
 		],
                 INPUT: [
 		    {text: 'I1', value: 'i1'}, {text: 'I2', value: 'i2'},
@@ -593,21 +662,41 @@ class Scratch3FtduinoBlocks {
 		    {text: 'O3', value: 'o3'}, {text: 'O4', value: 'o4'},
 		    {text: 'O5', value: 'o5'}, {text: 'O6', value: 'o6'},
 		    {text: 'O7', value: 'o7'}, {text: 'O8', value: 'o8'}
+                ],
+                MOTOR: [
+		    {text: 'M1', value: 'm1'}, {text: 'M2', value: 'm2'},
+		    {text: 'M3', value: 'm3'}, {text: 'M4', value: 'm4'}
+                ],
+                DIR: [
+		    {text: '\u21ba', value: 'left'}, {text: '\u21bb', value: 'right'}
+                ],
+                STOPMODE: [
+		    {text: 'Stop', value: 'off'}, {text: 'Brake', value: 'brake'}
                 ]
             },
             translation_map: {
 		en: {
 		    'extensionName': 'ftDuino (en)',
-                    'input': 'input [INPUT]',
-                    'ftduino.input': 'input [INPUT]',
+                    'input': '[INPUT]',
+                    'ftduino.input': '[INPUT]',
 		},
 		de: {
 		    'extensionName': 'ftDuino (de)',
-                    'input': 'Eingang [INPUT]',
-                    'ftduino.input': 'Eingang [INPUT]',
+                    'input': '[INPUT]',
+                    'ftduino.input': '[INPUT]',
 		}
 	    }		
         };
+    }
+    
+    handle_io(util) {  // all output commands
+	if((this.iostate == IOSTATE.IN) ||
+	   (this.iostate == IOSTATE.OUT) ||
+	   (this.iostate == IOSTATE.MODE) ||
+	   (this.iostate == IOSTATE.REPLY))
+	    util.yield();
+	else if(this.iostate == IOSTATE.DONE)
+	    this.iostate = IOSTATE.IDLE;
     }
     
     led (args, util) {
@@ -617,11 +706,8 @@ class Scratch3FtduinoBlocks {
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
 	    this.ftdSetLed(Cast.toBoolean(args.VALUE));
-	    util.yield();
-	} else if(this.iostate == IOSTATE.OUT)
-	    util.yield();
-	else if(this.iostate == IOSTATE.DONE)
-	    this.iostate = IOSTATE.IDLE;
+	}
+	this.handle_io(util);
     }
 	
     inputCallback (v) {
@@ -634,33 +720,9 @@ class Scratch3FtduinoBlocks {
     }
 	
     input (args, util) {
-	// check if ftDuino is connected at all
-	if(this.port == null) return false;
-
-	if(this.iostate == IOSTATE.IDLE) {
-	    if(MODE.SWITCH != this.input_mode[args.INPUT]) {
-		console.log("change mode", this.input_mode[args.INPUT], MODE.SWITCH);
-
-		this.iostate == IOSTATE.MODE;
-		this.iostate_port = args.INPUT;
-		this.input_mode[args.INPUT] = MODE.SWITCH;
-		this.ftdSetMode(args.INPUT, MODE.SWITCH);
-	    } else {
-		this.iostate = IOSTATE.IN;
-		this.iostate_port = args.INPUT;
-		this.ftdGet({ "port": args.INPUT },
-			    { "func": this.inputCallback.bind(this),
-			      "value": "value",
-			      "expect": { "port": args.INPUT } });
-	    }
-	    util.yield();
-	} else if((this.iostate == IOSTATE.MODE) ||
-		  (this.iostate == IOSTATE.IN) || (this.iostate == IOSTATE.REPLY))
-	    util.yield();
-	else if(this.iostate == IOSTATE.DONE)
-	    this.iostate = IOSTATE.IDLE;
-
-	return this.input_result;
+	// input is like input_analog but implicitely assumes MODE.SWITCH
+	args.MODE = MODE.SWITCH;
+	return this.input_analog (args, util);
     }
 	
     input_analog (args, util) {
@@ -669,9 +731,10 @@ class Scratch3FtduinoBlocks {
 	
 	if(this.iostate == IOSTATE.IDLE) {
 	    if(args.MODE != this.input_mode[args.INPUT]) {
-		console.log("change mode", this.input_mode[args.INPUT], args.MODE);
+		console.log("change mode for", args.INPUT, "from",
+			    this.input_mode[args.INPUT], "to", args.MODE);
 
-		this.iostate == IOSTATE.MODE;
+		this.iostate = IOSTATE.MODE;
 		this.iostate_port = args.INPUT;
 		this.input_mode[args.INPUT] = args.MODE;
 		this.ftdSetMode(args.INPUT, args.MODE);
@@ -683,28 +746,50 @@ class Scratch3FtduinoBlocks {
 			      "value": "value",
 			      "expect": { "port": args.INPUT } });
 	    }
-	    util.yield();
-	} else if((this.iostate == IOSTATE.MODE) ||
-		  (this.iostate == IOSTATE.IN) || (this.iostate == IOSTATE.REPLY))
-	    util.yield();
-	else if(this.iostate == IOSTATE.DONE)
-	    this.iostate = IOSTATE.IDLE;
-	
+	}
+	this.handle_io(util);
+
 	return this.input_result;
     }
-	
+
     output (args, util) {
-	// check if ftDuino is connected at all
-	if(this.port == null) return;
+	if(this.port == null) return;	// check if ftDuino is connected at all
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
 	    this.ftdSetOutput(args.OUTPUT, Cast.toBoolean(args.VALUE));
-	    util.yield();
-	} else if(this.iostate == IOSTATE.OUT)
-	    util.yield();
-	else if(this.iostate == IOSTATE.DONE)
-	    this.iostate = IOSTATE.IDLE;
+	}
+	this.handle_io(util);
+    }
+    
+    output_analog (args, util) {
+	if(this.port == null) return;	// check if ftDuino is connected at all
+
+	if(this.iostate == IOSTATE.IDLE) {
+	    this.iostate = IOSTATE.OUT;
+	    this.ftdSetOutput(args.OUTPUT, Cast.toNumber(args.VALUE));
+	}
+	this.handle_io(util);
+    }
+    
+    motor (args, util) {
+	if(this.port == null) return;	// check if ftDuino is connected at all
+
+	if(this.iostate == IOSTATE.IDLE) {
+	    this.iostate = IOSTATE.OUT;
+	    this.ftdSetMotor(args.MOTOR, args.DIR, Cast.toNumber(args.VALUE));
+	}
+	this.handle_io(util);
+    }
+    
+    motor_stop (args, util) {
+	if(this.port == null) return;	// check if ftDuino is connected at all
+
+	if(this.iostate == IOSTATE.IDLE) {
+	    this.iostate = IOSTATE.OUT;
+	    this.ftdSetMotor(args.MOTOR, args.STOPMODE, 100);
+	}
+	this.handle_io(util);
     }
 }
 
