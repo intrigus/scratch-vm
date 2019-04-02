@@ -7,9 +7,9 @@
 
   http://ftduino.de
 
-  About this extension:
-  - 
-
+  IoServer sketch versions supported:
+  0.9.0 - inputs I1-I8, outputs O1-O8, motors M1-M4
+  0.9.1 - -"-, counters C1-C4
 */
 
 const formatMessage = require('format-message');
@@ -106,6 +106,9 @@ const ftduinoNoWebUSBIcon = 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wI
  * @constructor
  */
 
+const MINIMAL_VERSION = "0.9.0"
+const COUNTER_VERSION = "0.9.1"
+
 const STATE = { NOWEBUSB:0, DISCONNECTED:1, CONNECTED:2 };
 const IOSTATE = { IDLE:0, MODE: 1, IN:2, OUT:3, REPLY:4, DONE:5 };
 const MODE = { UNSPEC:"unspecified", SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance" };
@@ -153,7 +156,7 @@ class Scratch3FtduinoBlocks {
 	    if(state == STATE.CONNECTED) {
 		this.error_msg = ""
 		icon = ftduinoConnectedIcon;
-		title = "ftDuino connected. Click icon to disconnect.";
+		title = "ftDuino " + msg + " connected. Click icon to disconnect.";
 		handler = this.onDisconnectClicked.bind(this);
 	    }
 
@@ -189,8 +192,9 @@ class Scratch3FtduinoBlocks {
     
     constructor (runtime) {
 	this.debug = false;
-	this.port == null;
-	state = STATE.NOWEBUSB;
+	this.port = null;
+	this.version = null;
+	this.state = STATE.NOWEBUSB;
 
 	// place icon
 	this.addButton(STATE.NOWEBUSB);
@@ -287,12 +291,50 @@ class Scratch3FtduinoBlocks {
 	this.reply_timeout = setTimeout(this.ftdGet.bind(this), 1000);
     }
 
+    parse_version(ver) {
+	lv = ver.split('.')
+	lv.forEach(function(item, index) {
+	    lv[index] = parseInt(item);
+	});
+
+	// fill up with trailing zeros of required
+	while(lv.length < 3)
+	    lv.push(0);
+	
+	return lv;
+    }
+
+    check_version(ver) {
+	s = null;
+	refver = this.parse_version(ver);
+	refver.forEach(function(item, index) {
+	    if((s == null) && (this.version[index] > item)) s = true;
+	    if((s == null) && (this.version[index] < item)) s = false;
+	}.bind(this));
+
+	if(s != null) return s;    
+	return true; // equal
+    }
+    
+    version_str() {
+	return "V"+this.version.map(String).join('.');
+    }
+	
     ftdCheckVersionCallback(ver) {
 	// enable run button after successful connection
-	console.log("ftDuino setup completed");
+	console.log("ftDuino setup completed, version:", ver);
 
+	// try to parse the version
+	this.version = this.parse_version(ver);
+
+	// some features require a certain sketch version
+	if(!this.check_version(MINIMAL_VERSION))
+	    alert("Warning: Version check failed with " + this.version_str());
+	this.counter_supported = this.check_version(COUNTER_VERSION);
+	if(!this.counter_supported) console.log("Counters not supported by ftDuino");
+	
 	// make button indicate that we are now connected
-	this.setButton(STATE.CONNECTED);
+	this.setButton(STATE.CONNECTED, this.version_str());
 
 	// no IO pending yet
 	this.iostate = IOSTATE.IDLE;
@@ -464,7 +506,7 @@ class Scratch3FtduinoBlocks {
 	// without webusb support we'd like to report an error. Unfortunately
 	// this results in some "scratchlink not installed/bluetooth disabled" message
 	// which is totally useless for webusb
-	if(state == STATE.NOWEBUSB) {
+	if(this.state == STATE.NOWEBUSB) {
 	    this.runtime.emit(this.runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
 	        message: `No WebUSB support!`,
 		extensionId: EXTENSION_ID
