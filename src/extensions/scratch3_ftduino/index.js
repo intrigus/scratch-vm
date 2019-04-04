@@ -338,10 +338,11 @@ class Scratch3FtduinoBlocks {
 	this.setButton(STATE.CONNECTED, this.version_str());
 
 	// no input hat active yet
-	this.hat_polling = null;
-	this.hat_timeout = null;
-	this.hat_pending = [ ]
-	this.hat_state = { }
+	this.hat = { }
+	this.hat.polling = null;
+	this.hat.timeout = null;
+	this.hat.pending = [ ]
+	this.hat.state = { }
 	
 	// no IO pending yet
 	this.iostate = IOSTATE.IDLE;
@@ -801,14 +802,22 @@ class Scratch3FtduinoBlocks {
         };
     }
     
-    handle_io(util) {  // all output commands
+    handle_io(util) {  // handle all io commands in progress
 	if((this.iostate == IOSTATE.IN) ||
 	   (this.iostate == IOSTATE.OUT) ||
 	   (this.iostate == IOSTATE.MODE) ||
 	   (this.iostate == IOSTATE.REPLY))
 	    util.yield();
-	else if(this.iostate == IOSTATE.DONE)
+	else if(this.iostate == IOSTATE.DONE) {
 	    this.iostate = IOSTATE.IDLE;
+
+	    // hat requests pending but neither a timeout
+	    // in progress nor a transfer? -> Immediate transfer
+	    if((this.hat.pending.length > 0) &&
+	       (this.hat.timeout == null) &&
+	       (this.hat.polling == null))
+		this.hat_input_poll();
+	}
     }
     
     led (args, util) {
@@ -832,51 +841,47 @@ class Scratch3FtduinoBlocks {
     }
 
     hat_input_callback(v) {
-	this.hat_state[this.hat_polling] = Cast.toBoolean(v);
-	this.hat_polling = null;
+	this.hat.state[this.hat.polling] = Cast.toBoolean(v);
+	this.hat.polling = null;
 	
 	// restart callback if there's something to request
-	if((this.hat_pending.length > 0) && (this.hat_timeout == null)) 
-	    this.hat_timeout = setTimeout(this.hat_input_poll.bind(this), 50);
+	if((this.hat.pending.length > 0) && (this.hat.timeout == null)) 
+	    this.hat.timeout = setTimeout(this.hat_input_poll.bind(this), 50);
     }
 	
     hat_input_poll() {
-	this.hat_timeout = null;
+	this.hat.timeout = null;
 	 
-	if(this.hat_pending.length > 0) {
+	if(this.hat.pending.length > 0) {
 	    // don't interrupt any ongoing transfer
-	    // problem: if the main loop runs with full IO load then this will basically
-	    // always fail and the hats will never be polled
-	    if(this.iostate != IOSTATE.IDLE) {
-		this.hat_timeout = setTimeout(this.hat_input_poll.bind(this), 1);
+	    if(this.iostate != IOSTATE.IDLE)
 		return;
-	    }
 	    
-	    this.hat_polling = this.hat_pending.shift();
+	    this.hat.polling = this.hat.pending.shift();
 
 	    // trigger actual input
-	    this.ftdGet({ "port": this.hat_polling },
+	    this.ftdGet({ "port": this.hat.polling },
 			{ "func": this.hat_input_callback.bind(this),
 			  "value": "value",
-			  "expect": { "port": this.hat_polling } });
+			  "expect": { "port": this.hat.polling } });
 	}
     }
     
     when_input (args, util) {
 	// add this request to queue if it's not already in there
-	if(!this.hat_pending.includes(args.INPUT))
-	    this.hat_pending.push(args.INPUT);
+	if(!this.hat.pending.includes(args.INPUT))
+	    this.hat.pending.push(args.INPUT);
 
 	// schedule timeout if there's no timeout and no input operation in progress
-	if((this.hat_timeout == null) && (this.hat_polling == null))
-	    this.hat_timeout = setTimeout(this.hat_input_poll.bind(this), 50);
+	if((this.hat.timeout == null) && (this.hat.polling == null))
+	    this.hat.timeout = setTimeout(this.hat_input_poll.bind(this), 50);
 
 	// if we have no results for this input yet, then just return false
-	if(this.hat_state[args.INPUT] == undefined)
+	if(this.hat.state[args.INPUT] == undefined)
 	    return false;
 
 	// we do have a result -> return it
-	return this.hat_state[args.INPUT];
+	return this.hat.state[args.INPUT];
     }
 	
     input (args, util) {
@@ -892,7 +897,7 @@ class Scratch3FtduinoBlocks {
 	
     input_analog (args, util) {
 	if(this.port == null) return false;	    // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 	
 	if(this.iostate == IOSTATE.IDLE) {
 	    if(args.INPUT.toLowerCase()[0] == 'c') {
@@ -934,7 +939,7 @@ class Scratch3FtduinoBlocks {
 
     clear_counter (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 	
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -945,7 +950,7 @@ class Scratch3FtduinoBlocks {
 	
     output (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -956,7 +961,7 @@ class Scratch3FtduinoBlocks {
     
     output_analog (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -967,7 +972,7 @@ class Scratch3FtduinoBlocks {
     
     motor (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -978,7 +983,7 @@ class Scratch3FtduinoBlocks {
     
     motor_stop (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat_polling != null) util.yield();  // wait for possibly ongoing polling to end
+	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
