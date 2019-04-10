@@ -245,7 +245,7 @@ class Scratch3Text2SpeechBlocks {
             [HINDI_ID]: {
                 name: 'Hindi',
                 locales: ['hi'],
-                speechSynthLocale: 'en-IN',
+                speechSynthLocale: 'hi-IN',
                 singleGender: true
             },
             [ICELANDIC_ID]: {
@@ -405,7 +405,11 @@ class Scratch3Text2SpeechBlocks {
 
         return {
             id: 'text2speech',
-            name: 'Text to Speech',
+            name: formatMessage({
+                id: 'text2speech.categoryName',
+                default: 'Text to Speech',
+                description: 'Name of the Text to Speech extension.'
+            }),
             blockIconURI: blockIconURI,
             menuIconURI: menuIconURI,
             blocks: [
