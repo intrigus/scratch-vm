@@ -10,6 +10,11 @@
   IoServer sketch versions supported:
   0.9.0 - inputs I1-I8, outputs O1-O8, motors M1-M4
   0.9.1 - -"-, counters C1-C4
+
+  TODO:
+  - yielding an input block does not work at all :-(
+    -> poll inputs asynchronously in the background
+
 */
 
 const formatMessage = require('format-message');
@@ -346,14 +351,61 @@ class Scratch3FtduinoBlocks {
 	
 	// no IO pending yet
 	this.iostate = IOSTATE.IDLE;
+	this.done_timeout = null;
 
+	// inputs are constantly polled by a background
+	// timer
+	
 	// current input modes
 	this.input_mode = {
 	    "i1":MODE.UNSPEC, "i2":MODE.UNSPEC, "i3":MODE.UNSPEC, "i4":MODE.UNSPEC,
 	    "i5":MODE.UNSPEC, "i6":MODE.UNSPEC, "i7":MODE.UNSPEC, "i8":MODE.UNSPEC,
 	    "c1":MODE.UNSPEC, "c2":MODE.UNSPEC, "c3":MODE.UNSPEC, "c4":MODE.UNSPEC }
+
+	this.requested_input_mode = {
+	    "i1":MODE.SWITCH, "i2":MODE.SWITCH, "i3":MODE.SWITCH, "i4":MODE.SWITCH,
+	    "i5":MODE.SWITCH, "i6":MODE.SWITCH, "i7":MODE.SWITCH, "i8":MODE.SWITCH,
+	    "c1":MODE.SWITCH, "c2":MODE.SWITCH, "c3":MODE.SWITCH, "c4":MODE.SWITCH }
+
+	// current input values
+	this.input_value = {
+	    "i1":null, "i2":null, "i3":null, "i4":null,
+	    "i5":null, "i6":null, "i7":null, "i8":null,
+	    "c1":null, "c2":null, "c3":null, "c4":null }
+
+	// poll first input
+	this.current_input = 0;
+	this.inputPoll();
     }
 
+    inputPollCallback(v) {
+	console.log("Result:", v);
+
+	// we store all types of values
+	// FIXME
+	
+	// poll next input
+	this.current_input = this.current_input + 1
+	if(this.current_input == 8) this.current_input = 0;
+	this.inputPoll();
+    }
+	
+    inputPoll() {
+	// poll constantly. Stop polling if a output command
+	// is pending. Polling will be re-enabled once the output
+	// has succeeded	
+	index2port = [ "i1", "i2", "i3", "i4",
+		       "i5", "i6", "i7", "i8",
+		       "c1", "c2", "c3", "c4" ]; 
+	
+	console.log("Polling", 	index2port[this.current_input]);
+	
+	this.ftdGet({ "port": index2port[this.current_input] },
+		    { "func": this.inputPollCallback.bind(this),
+		      "value": "value",
+		      "expect": { "port": index2port[this.current_input] } });
+    }
+    
     ftdCheckVersion() {
 	console.log("Checking for version");
 	
@@ -367,6 +419,7 @@ class Scratch3FtduinoBlocks {
 	// run result through json decoder
 	result = JSON.parse(msg);
 
+	console.log("parse", msg, this.callback);
 	// if there's a pending callback
 	if(this.callback) {
 	    var reply_ok = true;
@@ -393,14 +446,17 @@ class Scratch3FtduinoBlocks {
 	    if(reply_ok) {
 		if(this.debug) console.log("Reply ok, cancelling timeout");
 		
-		// call it callback ...
-		this.callback["func"](result[this.callback["value"]]);
+		cb = this.callback;
+		
 		// ... and forget about it
 		this.callback = null;
 		
 		// cancel any pending timeout
 		clearTimeout(this.reply_timeout);
 		this.reply_timeout = null;
+		
+		// call it callback ...		
+		cb["func"](result[cb["value"]]);
 	    }
 	}
     }
@@ -495,6 +551,7 @@ class Scratch3FtduinoBlocks {
 
     // ------------------------ the following will only be used if ------------------
     // ------------------------ "showStatusButton: true," is set --------------------
+    /*
     
     // connect () { console.log("connect"); } 
     // disconnect () { console.log("disconnect"); } 
@@ -541,6 +598,7 @@ class Scratch3FtduinoBlocks {
 	console.log("isconnected");
 	return true;
     }
+    */
 	
     /**
      * @returns {object} metadata for this extension and its blocks.
@@ -801,45 +859,55 @@ class Scratch3FtduinoBlocks {
 	    }		
         };
     }
-    
+
     handle_io(util) {  // handle all io commands in progress
 	if((this.iostate == IOSTATE.IN) ||
 	   (this.iostate == IOSTATE.OUT) ||
 	   (this.iostate == IOSTATE.MODE) ||
-	   (this.iostate == IOSTATE.REPLY))
+	   (this.iostate == IOSTATE.REPLY)) {
+	    console.log("yield");
 	    util.yield();
+	    console.log("after");
+	}
 	else if(this.iostate == IOSTATE.DONE) {
+	    if(this.done_timeout != null) {
+		clearTimeout(this.done_timeout);
+		this.done_timeout = null;
+	    }
+	    
 	    this.iostate = IOSTATE.IDLE;
-
-	    // hat requests pending but neither a timeout
-	    // in progress nor a transfer? -> Immediate transfer
-	    if((this.hat.pending.length > 0) &&
-	       (this.hat.timeout == null) &&
-	       (this.hat.polling == null))
-		this.hat_input_poll();
+	    this.hat_check_pending();
 	}
     }
     
     led (args, util) {
+	console.log("LED", args.VALUE);
+	
 	// check if ftDuino is connected at all
 	if(this.port == null) return;
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
 	    this.ftdSetLed(Cast.toBoolean(args.VALUE));
+	    util.yield();
 	}
 	this.handle_io(util);
+	console.log("led done");
     }
-	
+
     inputCallback (v) {
+	console.log("CB", v);
+	    
 	if(this.input_mode[this.iostate_port] == MODE.SWITCH)
 	    this.input_result = Cast.toBoolean(v);
 	else
 	    this.input_result = Cast.toNumber(v);
-	
+
 	this.iostate = IOSTATE.DONE;
     }
 
+    
+    
     hat_input_callback(v) {
 	this.hat.state[this.hat.polling] = Cast.toBoolean(v);
 	this.hat.polling = null;
@@ -867,17 +935,29 @@ class Scratch3FtduinoBlocks {
 	}
     }
     
+    // check if there are pending request for hats. Start timer
+    // if required
+    hat_check_pending() {
+	// hat requests pending but neither a timeout
+	// in progress nor a transfer? -> Immediate transfer
+	if((this.hat.pending.length > 0) &&
+	   (this.hat.timeout == null) &&
+	   (this.hat.polling == null))
+	    this.hat_input_poll();
+    }
+    
     when_input (args, util) {
 	// add this request to queue if it's not already in there
 	if(!this.hat.pending.includes(args.INPUT))
 	    this.hat.pending.push(args.INPUT);
 
-	// schedule timeout if there's no timeout and no input operation in progress
-	if((this.hat.timeout == null) && (this.hat.polling == null))
+	// schedule timeout if there's no timeout and no input operation in progress and
+	// if there is no main io operation in progress
+	if((this.hat.timeout == null) && (this.hat.polling == null) && (this.iostate == IOSTATE.IDLE)) 
 	    this.hat.timeout = setTimeout(this.hat_input_poll.bind(this), 50);
-
+	    
 	// if we have no results for this input yet, then just return false
-	if(this.hat.state[args.INPUT] == undefined)
+	if(this.hat.state[args.INPUT] === undefined)
 	    return false;
 
 	// we do have a result -> return it
@@ -896,6 +976,11 @@ class Scratch3FtduinoBlocks {
     }
 	
     input_analog (args, util) {
+	console.log("I", this.hat.polling, this.iostate);
+	return 0;
+    }
+
+    nase_001(args, util) {	
 	if(this.port == null) return false;	    // check if ftDuino is connected at all
 	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 	
@@ -934,6 +1019,7 @@ class Scratch3FtduinoBlocks {
 	}
 	this.handle_io(util);
 
+	console.log("R", this.input_result);
 	return this.input_result;
     }
 
