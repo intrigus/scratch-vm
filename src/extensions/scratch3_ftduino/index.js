@@ -115,8 +115,11 @@ const MINIMAL_VERSION = "0.9.0"
 const COUNTER_VERSION = "0.9.1"
 
 const STATE = { NOWEBUSB:0, DISCONNECTED:1, CONNECTED:2 };
-const IOSTATE = { IDLE:0, MODE: 1, IN:2, OUT:3, REPLY:4, DONE:5 };
-const MODE = { UNSPEC:"unspecified", SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance", COUNTER:"counter" };
+const IOSTATE = { IDLE:0, OUT:1, DONE:2 };
+const REQ = "requested";
+const MODE = { UNSPEC:"unspecified",
+   SWITCH:"switch", VOLTAGE:"voltage", RESISTANCE:"resistance", COUNTER:"counter",
+   SWREQ:"switch-"+REQ, VREQ:"voltage-"+REQ, RREQ:"resistance-"+REQ };
 
 const FTDUINO_BUTTON_ID = "ftDuino_connect_button";
 const PARENT_CLASS = "controls_controls-container_2xinB"
@@ -246,6 +249,16 @@ class Scratch3FtduinoBlocks {
 	});
     }
 
+    // with proper promise handling
+    ftdReqP(req) {
+	if (this.port == null) return Promise.reject(new Error('No port'));
+        return this.port.send(this.textEncoder.encode(req));
+    }
+    
+    ftdSetP(item)               { return this.ftdReqP(JSON.stringify({ set: item })); };
+    ftdSetModeP(port,mode)      { return this.ftdSetP({ port: port, mode: mode }); }
+
+    
     // commands sent to ftDuino
     ftdSet(item) { this.ftdReq(JSON.stringify({ set: item })); };
     
@@ -261,20 +274,9 @@ class Scratch3FtduinoBlocks {
             p = this.port.send(this.textEncoder.encode(req));
             p.then(
 		function(val) {
-		    // a out transfer is now done, a in transfer expects a reply
+		    // a out transfer is now done
 		    if(this.iostate == IOSTATE.OUT)
 			this.iostate = IOSTATE.DONE;
-		    else if(this.iostate == IOSTATE.IN)
-			this.iostate = IOSTATE.REPLY;
-		    else if(this.iostate == IOSTATE.MODE) {
-			console.log("mode changed, requesting input for", this.iostate_port);
-			this.iostate = IOSTATE.IN;
-			// 
-			this.ftdGet({ "port": this.iostate_port },
-				    { "func": this.inputCallback.bind(this),
-				      "value": "value",
-				      "expect": { "port": this.iostate_port } });
-		    }
 
 		    if(this.debug)
 			console.log("PROMISE fulfilled: "+ val.bytesWritten + " " + val.status);
@@ -297,6 +299,25 @@ class Scratch3FtduinoBlocks {
 	this.reply_timeout = setTimeout(this.ftdGet.bind(this), 1000);
     }
 
+    ftdGetInput(port) {
+	// port cXc are the counter values of cX
+	if(port.length == 3) {
+	    port = port.substring(0,2);
+
+	    this.ftdGet({ "port": port, "type": "counter" },
+			{ "func": this.inputPollCallback.bind(this),
+			  "value": "value",
+			  "expect": { "port": port } });
+	    return;
+	}
+	
+	// for the counters this will return the counter values 
+	this.ftdGet({ "port": port },
+		    { "func": this.inputPollCallback.bind(this),
+		      "value": "value",
+		      "expect": { "port": port } });
+    }
+    
     parse_version(ver) {
 	lv = ver.split('.')
 	lv.forEach(function(item, index) {
@@ -342,13 +363,6 @@ class Scratch3FtduinoBlocks {
 	// make button indicate that we are now connected
 	this.setButton(STATE.CONNECTED, this.version_str());
 
-	// no input hat active yet
-	this.hat = { }
-	this.hat.polling = null;
-	this.hat.timeout = null;
-	this.hat.pending = [ ]
-	this.hat.state = { }
-	
 	// no IO pending yet
 	this.iostate = IOSTATE.IDLE;
 	this.done_timeout = null;
@@ -356,54 +370,64 @@ class Scratch3FtduinoBlocks {
 	// inputs are constantly polled by a background
 	// timer
 	
-	// current input modes
+	// current input modes is "switch requested", counters inputs have two values:
+	// cX for the state of the counter input and cXc for the counter value
 	this.input_mode = {
-	    "i1":MODE.UNSPEC, "i2":MODE.UNSPEC, "i3":MODE.UNSPEC, "i4":MODE.UNSPEC,
-	    "i5":MODE.UNSPEC, "i6":MODE.UNSPEC, "i7":MODE.UNSPEC, "i8":MODE.UNSPEC,
-	    "c1":MODE.UNSPEC, "c2":MODE.UNSPEC, "c3":MODE.UNSPEC, "c4":MODE.UNSPEC }
-
-	this.requested_input_mode = {
-	    "i1":MODE.SWITCH, "i2":MODE.SWITCH, "i3":MODE.SWITCH, "i4":MODE.SWITCH,
-	    "i5":MODE.SWITCH, "i6":MODE.SWITCH, "i7":MODE.SWITCH, "i8":MODE.SWITCH,
-	    "c1":MODE.SWITCH, "c2":MODE.SWITCH, "c3":MODE.SWITCH, "c4":MODE.SWITCH }
+	    "i1":MODE.SWREQ,    "i2":MODE.SWREQ,    "i3":MODE.SWREQ,    "i4":MODE.SWREQ,
+	    "i5":MODE.SWREQ,    "i6":MODE.SWREQ,    "i7":MODE.SWREQ,    "i8":MODE.SWREQ,
+	    "c1":MODE.SWITCH,   "c2":MODE.SWITCH,   "c3":MODE.SWITCH,   "c4":MODE.SWITCH,
+	    "c1c":MODE.COUNTER, "c2c":MODE.COUNTER, "c3c":MODE.COUNTER, "c4c":MODE.COUNTER }
 
 	// current input values
 	this.input_value = {
-	    "i1":null, "i2":null, "i3":null, "i4":null,
-	    "i5":null, "i6":null, "i7":null, "i8":null,
-	    "c1":null, "c2":null, "c3":null, "c4":null }
+	    "i1":null,  "i2":null,  "i3":null,  "i4":null,
+	    "i5":null,  "i6":null,  "i7":null,  "i8":null,
+	    "c1":null,  "c2":null,  "c3":null,  "c4":null,
+	    "c1c":null, "c2c":null, "c3c":null, "c4c":null }
 
 	// poll first input
-	this.current_input = 0;
+	this.current_input = "i1";
 	this.inputPoll();
     }
-
+    
     inputPollCallback(v) {
-	console.log("Result:", v);
+	next = { "i1":"i2", "i2":"i3", "i3":"i4", "i4":"i5",
+		 "i5":"i6", "i6":"i7", "i7":"i8",
+		 "i8": this.counter_supported?"c1":"i1",
+		 "c1":"c2", "c2":"c3", "c3":"c4", "c4": "c1c",
+		 "c1c":"c2c", "c2c":"c3c", "c3c":"c4c", "c4c": "i1"
+	       };
 
 	// we store all types of values
-	// FIXME
-	
+	if(this.input_mode[this.current_input] == MODE.SWITCH)
+	    this.input_value[this.current_input] = Cast.toBoolean(v);
+	else
+	    this.input_value[this.current_input] = Cast.toNumber(v);
+
 	// poll next input
-	this.current_input = this.current_input + 1
-	if(this.current_input == 8) this.current_input = 0;
+	this.current_input = next[this.current_input]
 	this.inputPoll();
     }
-	
+
     inputPoll() {
 	// poll constantly. Stop polling if a output command
 	// is pending. Polling will be re-enabled once the output
 	// has succeeded	
-	index2port = [ "i1", "i2", "i3", "i4",
-		       "i5", "i6", "i7", "i8",
-		       "c1", "c2", "c3", "c4" ]; 
+	// console.log("Polling", this.current_input, this.input_mode[this.current_input]);
+
+	// check if a new mode is requested for this port, requested modes
+	// all end with "-requested"
+	if(this.input_mode[this.current_input].split("-").length == 2) {
+	    newmode = this.input_mode[this.current_input].split("-")[0];
 	
-	console.log("Polling", 	index2port[this.current_input]);
-	
-	this.ftdGet({ "port": index2port[this.current_input] },
-		    { "func": this.inputPollCallback.bind(this),
-		      "value": "value",
-		      "expect": { "port": index2port[this.current_input] } });
+	    // request new mode
+	    this.ftdSetModeP(this.current_input, newmode).then(function() {
+		this.input_mode[this.current_input] = newmode;
+		this.ftdGetInput(this.current_input);
+	    }.bind(this) );	    
+	    return;
+	}	
+	this.ftdGetInput(this.current_input);
     }
     
     ftdCheckVersion() {
@@ -419,7 +443,6 @@ class Scratch3FtduinoBlocks {
 	// run result through json decoder
 	result = JSON.parse(msg);
 
-	console.log("parse", msg, this.callback);
 	// if there's a pending callback
 	if(this.callback) {
 	    var reply_ok = true;
@@ -808,7 +831,7 @@ class Scratch3FtduinoBlocks {
 		    { text: formatMessage({id: 'ftduino.off',default: 'Off'}), value: '0' }
 		],
                 MODE: [
-		    {text: '\u2126', value: MODE.RESISTANCE }, {text: 'V', value: MODE.VOLTAGE }
+		    {text: '\u2126', value: MODE.RESISTANCE }, {text: 'mV', value: MODE.VOLTAGE }
 		],
                 INPUT: [
 		    {text: 'I1', value: 'i1'}, {text: 'I2', value: 'i2'},
@@ -861,107 +884,25 @@ class Scratch3FtduinoBlocks {
     }
 
     handle_io(util) {  // handle all io commands in progress
-	if((this.iostate == IOSTATE.IN) ||
-	   (this.iostate == IOSTATE.OUT) ||
-	   (this.iostate == IOSTATE.MODE) ||
-	   (this.iostate == IOSTATE.REPLY)) {
-	    console.log("yield");
+	if(this.iostate == IOSTATE.OUT)	    
 	    util.yield();
-	    console.log("after");
-	}
-	else if(this.iostate == IOSTATE.DONE) {
-	    if(this.done_timeout != null) {
-		clearTimeout(this.done_timeout);
-		this.done_timeout = null;
-	    }
-	    
+	else if(this.iostate == IOSTATE.DONE)	    
 	    this.iostate = IOSTATE.IDLE;
-	    this.hat_check_pending();
-	}
     }
     
     led (args, util) {
-	console.log("LED", args.VALUE);
-	
 	// check if ftDuino is connected at all
 	if(this.port == null) return;
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
 	    this.ftdSetLed(Cast.toBoolean(args.VALUE));
-	    util.yield();
 	}
 	this.handle_io(util);
-	console.log("led done");
     }
 
-    inputCallback (v) {
-	console.log("CB", v);
-	    
-	if(this.input_mode[this.iostate_port] == MODE.SWITCH)
-	    this.input_result = Cast.toBoolean(v);
-	else
-	    this.input_result = Cast.toNumber(v);
-
-	this.iostate = IOSTATE.DONE;
-    }
-
-    
-    
-    hat_input_callback(v) {
-	this.hat.state[this.hat.polling] = Cast.toBoolean(v);
-	this.hat.polling = null;
-	
-	// restart callback if there's something to request
-	if((this.hat.pending.length > 0) && (this.hat.timeout == null)) 
-	    this.hat.timeout = setTimeout(this.hat_input_poll.bind(this), 50);
-    }
-	
-    hat_input_poll() {
-	this.hat.timeout = null;
-	 
-	if(this.hat.pending.length > 0) {
-	    // don't interrupt any ongoing transfer
-	    if(this.iostate != IOSTATE.IDLE)
-		return;
-	    
-	    this.hat.polling = this.hat.pending.shift();
-
-	    // trigger actual input
-	    this.ftdGet({ "port": this.hat.polling },
-			{ "func": this.hat_input_callback.bind(this),
-			  "value": "value",
-			  "expect": { "port": this.hat.polling } });
-	}
-    }
-    
-    // check if there are pending request for hats. Start timer
-    // if required
-    hat_check_pending() {
-	// hat requests pending but neither a timeout
-	// in progress nor a transfer? -> Immediate transfer
-	if((this.hat.pending.length > 0) &&
-	   (this.hat.timeout == null) &&
-	   (this.hat.polling == null))
-	    this.hat_input_poll();
-    }
-    
     when_input (args, util) {
-	// add this request to queue if it's not already in there
-	if(!this.hat.pending.includes(args.INPUT))
-	    this.hat.pending.push(args.INPUT);
-
-	// schedule timeout if there's no timeout and no input operation in progress and
-	// if there is no main io operation in progress
-	if((this.hat.timeout == null) && (this.hat.polling == null) && (this.iostate == IOSTATE.IDLE)) 
-	    this.hat.timeout = setTimeout(this.hat_input_poll.bind(this), 50);
-	    
-	// if we have no results for this input yet, then just return false
-	if(this.hat.state[args.INPUT] === undefined)
-	    return false;
-
-	// we do have a result -> return it
-	return this.hat.state[args.INPUT];
+	return this.input (args, util);
     }
 	
     input (args, util) {
@@ -969,23 +910,30 @@ class Scratch3FtduinoBlocks {
 	args.MODE = MODE.SWITCH;
 	return this.input_analog (args, util);
     }
-	
+
     input_counter (args, util) {
-	args.MODE = MODE.COUNTER;
-	return this.input_analog (args, util);
+	new_args = {};
+	new_args.MODE = MODE.COUNTER;
+	// the internal name of the counter value ends with 'c'
+	new_args.INPUT = args.INPUT+"c";
+	
+	return this.input_analog (new_args, util);
     }
 	
     input_analog (args, util) {
-	console.log("I", this.hat.polling, this.iostate);
-	return 0;
+	if(this.input_mode[args.INPUT] != args.MODE) {
+	    // request new input mode
+	    this.input_mode[args.INPUT] = args.MODE + "-" + REQ;
+
+	    // immediate result of a mismatch is false/0/65535 for switch/u/r
+	    if(args.MODE == MODE.SWITCH)     return false;
+	    if(args.MODE == MODE.RESISTANCE) return 65535;
+	    return 0;
+	}	
+	return this.input_value[args.INPUT];
     }
 
-    nase_001(args, util) {	
-	if(this.port == null) return false;	    // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
-	
-	if(this.iostate == IOSTATE.IDLE) {
-	    if(args.INPUT.toLowerCase()[0] == 'c') {
+    /*
 		// counter c1-c4
 		this.iostate = IOSTATE.IN;
 		this.iostate_port = args.INPUT;
@@ -997,35 +945,10 @@ class Scratch3FtduinoBlocks {
 			      "expect": { "port": args.INPUT } });
 		if(!this.counter_supported)
 		    alert("Counters not supported, please update the IoServer sketch");
-	    } else {
-		// input i1-i8
-		if(args.MODE != this.input_mode[args.INPUT]) {
-		    console.log("change mode for", args.INPUT, "from",
-				this.input_mode[args.INPUT], "to", args.MODE);
-
-		    this.iostate = IOSTATE.MODE;
-		    this.iostate_port = args.INPUT;
-		    this.input_mode[args.INPUT] = args.MODE;
-		    this.ftdSetMode(args.INPUT, args.MODE);
-		} else {
-		    this.iostate = IOSTATE.IN;
-		    this.iostate_port = args.INPUT;
-		    this.ftdGet({ "port": args.INPUT },
-				{ "func": this.inputCallback.bind(this),
-				  "value": "value",
-				  "expect": { "port": args.INPUT } });
-		}
-	    }
-	}
-	this.handle_io(util);
-
-	console.log("R", this.input_result);
-	return this.input_result;
-    }
+    */
 
     clear_counter (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 	
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -1036,7 +959,6 @@ class Scratch3FtduinoBlocks {
 	
     output (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -1047,7 +969,6 @@ class Scratch3FtduinoBlocks {
     
     output_analog (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -1058,7 +979,6 @@ class Scratch3FtduinoBlocks {
     
     motor (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
@@ -1069,7 +989,6 @@ class Scratch3FtduinoBlocks {
     
     motor_stop (args, util) {
 	if(this.port == null) return;	            // check if ftDuino is connected at all
-	if(this.hat.polling != null) util.yield();  // wait for possibly ongoing polling to end
 
 	if(this.iostate == IOSTATE.IDLE) {
 	    this.iostate = IOSTATE.OUT;
