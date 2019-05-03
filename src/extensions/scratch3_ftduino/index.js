@@ -12,7 +12,6 @@
   0.9.1 - -"-, counters C1-C4
 */
 
-const formatMessage = require('format-message');
 const ArgumentType = require('../../extension-support/argument-type');
 const BlockType = require('../../extension-support/block-type');
 const Cast = require('../../util/cast');
@@ -157,13 +156,14 @@ class Scratch3FtduinoBlocks {
 	    }
 
 	    // set button parameters
+	    this.button_state = state;
 	    button.src = icon;
 	    button.title = title;
 	    button.onclick = handler;
 	}
     }
     
-    addButton() {
+    addButton(initial = true) {
 	//  check if the button already exists
 	button = document.getElementById(FTDUINO_BUTTON_ID);
 
@@ -179,6 +179,13 @@ class Scratch3FtduinoBlocks {
 		img.setAttribute("src", ftduinoNoWebUSBIcon);
 		
 		hdrdiv.appendChild(img);
+
+		// the scratch3 gui will remove our button e.g. when the
+		// language is being changed. We need to restore it then
+		if(initial)
+		    setInterval(() => this.addButton(false), 1000);
+		else
+		    this.setButton(this.button_state, this.error_msg);
 	    } else
 		alert("ftDuino: controls-container class not found!");
 	}
@@ -524,57 +531,6 @@ class Scratch3FtduinoBlocks {
 	}
     }
 
-    // ------------------------ the following will only be used if ------------------
-    // ------------------------ "showStatusButton: true," is set --------------------
-    /*
-    
-    // connect () { console.log("connect"); } 
-    // disconnect () { console.log("disconnect"); } 
-
-    scan_done() {
-	// scratch-gui/src/lib/libraries/extensions/index.jsx
-	// scratch-gui/src/components/connection-modal/scanning-step.jsx
-	// scratch-vm/src/io/bt.js
-
-	// this reports a dummy device 1 second after the search has been triggered
-	params = {}
-	params.peripheralId = "ftDuino #1";
-	params.name = "ftDuino #1";
-	params.rssi = 12;
-	
-	this.devices = { };
-	this.devices[params.peripheralId] = params;
-
-	// without webusb support we'd like to report an error. Unfortunately
-	// this results in some "scratchlink not installed/bluetooth disabled" message
-	// which is totally useless for webusb
-	if(this.state == STATE.NOWEBUSB) {
-	    this.runtime.emit(this.runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
-	        message: `No WebUSB support!`,
-		extensionId: EXTENSION_ID
-	    });
-	    return;
-	}
-	    
-	this.runtime.emit(
-            this.runtime.constructor.PERIPHERAL_LIST_UPDATE, this.devices);
-
-	// alternally emit error	
-	// this.runtime.emit(this.runtime.constructor.PERIPHERAL_SCAN_TIMEOUT);
-    }
-    
-    scan () {
-	// this should trigger some kind of search
-	setTimeout(this.scan_done.bind(this), 1000);	
-    }
-    
-    isConnected () {
-	// scratch-vm/node_modules/scratch-blocks/core/flyout_extension_category_header.js
-	console.log("isconnected");
-	return true;
-    }
-    */
-	
     /**
      * @returns {object} metadata for this extension and its blocks.
      */
@@ -583,16 +539,11 @@ class Scratch3FtduinoBlocks {
             id: EXTENSION_ID,
             name: 'ftDuino',
             blockIconURI: blockIconURI,
-//	    showStatusButton: true,             // enable this for the status button
 	    docsURI: 'http://ftduino.de',
             blocks: [
 		{
 		    opcode: 'led',
-		    text: formatMessage({
-                        id: 'ftduino.led',
-                        default: 'LED [VALUE]',  // \u26ef
-                        description: 'set the ftDuino led'
-                    }),
+		    text: 'LED [VALUE]',
                     blockType: BlockType.COMMAND,
                     arguments: {
 			VALUE: {
@@ -604,11 +555,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'input',
-		    text: formatMessage({
-                        id: 'ftduino.input',
-                        default: '[INPUT]',
-                        description: 'read an ftDuino input'
-                    }),
+		    text: '[INPUT]',
                     blockType: BlockType.BOOLEAN,
                     arguments: {
                         INPUT: {
@@ -620,11 +567,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'output',
-		    text: formatMessage({
-                        id: 'ftduino.output',
-                        default: '[OUTPUT] [VALUE]',
-                        description: 'set an ftDuino output'
-                    }),
+		    text: '[OUTPUT] [VALUE]',
                     blockType: BlockType.COMMAND,
                     arguments: {
                         OUTPUT: {
@@ -641,11 +584,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
                     opcode: 'when_input',
-                    text: formatMessage({
-                        id: 'ftduino.when_input',
-                        default: 'when [INPUT]',
-                        description: 'when an input is true'
-                    }),
+                    text: 'when [INPUT]',
                     blockType: BlockType.HAT,
                     arguments: {
                         INPUT: {
@@ -658,11 +597,7 @@ class Scratch3FtduinoBlocks {
 		'---',
 		{
 		    opcode: 'input_analog',
-		    text: formatMessage({
-                        id: 'ftduino.input_analog',
-                        default: '[INPUT] [MODE]',
-                        description: 'read an ftDuino input'
-                    }),
+		    text: '[INPUT] [MODE]',
                     blockType: BlockType.REPORTER,
                     arguments: {
                         INPUT: {
@@ -679,11 +614,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'output_analog',
-		    text: formatMessage({
-                        id: 'ftduino.output_analog',
-                        default: '[OUTPUT] [VALUE] %',
-                        description: 'set an ftDuino output'
-                    }),
+		    text: '[OUTPUT] [VALUE] %',
                     blockType: BlockType.COMMAND,
                     arguments: {
                         OUTPUT: {
@@ -699,11 +630,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'motor',
-		    text: formatMessage({
-                        id: 'ftduino.motor',
-                        default: '[MOTOR] [DIR] [VALUE] %',
-                        description: 'set an ftDuino motor output'
-                    }),
+		    text: '[MOTOR] [DIR] [VALUE] %',
                     blockType: BlockType.COMMAND,
                     arguments: {
                         MOTOR: {
@@ -724,11 +651,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'motor_stop',
-		    text: formatMessage({
-                        id: 'ftduino.motor_stop',
-                        default: '[MOTOR] [STOPMODE]',
-                        description: 'stop an ftDuino motor output'
-                    }),
+		    text: '[MOTOR] [STOPMODE]',
                     blockType: BlockType.COMMAND,
                     arguments: {
                         MOTOR: {
@@ -746,11 +669,7 @@ class Scratch3FtduinoBlocks {
 		'---',
 		{
 		    opcode: 'input_counter',
-		    text: formatMessage({
-                        id: 'ftduino.input_counter',
-                        default: '[INPUT]',
-                        description: 'read an ftDuino counter'
-                    }),
+		    text: '[INPUT]',
                     blockType: BlockType.REPORTER,
                     arguments: {
                         INPUT: {
@@ -762,11 +681,7 @@ class Scratch3FtduinoBlocks {
 		},
 		{
 		    opcode: 'clear_counter',
-		    text: formatMessage({
-                        id: 'ftduino.clear_counter',
-                        default: 'Clear [INPUT]',
-                        description: 'clear an ftDuino counter'
-                    }),
+		    text: 'Clear [INPUT]',
                     blockType: BlockType.COMMAND,
                     arguments: {
                         INPUT: {
@@ -779,8 +694,8 @@ class Scratch3FtduinoBlocks {
             ],
             menus: {
                 ONOFFSTATE: [
-		    { text: formatMessage({id: 'ftduino.on', default: 'On' }), value: '1'},
-		    { text: formatMessage({id: 'ftduino.off',default: 'Off'}), value: '0' }
+		    { text: 'On',  value: '1' },
+		    { text: 'Off', value: '0' }
 		],
                 MODE: [
 		    {text: '\u2126', value: MODE.RESISTANCE }, {text: 'mV', value: MODE.VOLTAGE }
@@ -819,37 +734,12 @@ class Scratch3FtduinoBlocks {
                 STOPMODE: [
 		    {text: 'Stop', value: 'off'}, {text: 'Brake', value: 'brake'}
                 ]
-            },
-            translation_map: {
-		en: {
-		    'extensionName': 'ftDuino (en)',
-                    'input': '[INPUT]',
-                    'ftduino.input': '[INPUT]',
-		},
-		de: {
-		    'extensionName': 'ftDuino (de)',
-                    'input': '[INPUT]',
-                    'ftduino.input': '[INPUT]',
-		}
 	    }		
         };
     }
 
     led (args, util) {
 	return this.ftdSetLed(Cast.toBoolean(args.VALUE));
-    }
-
-    delay(t) {
-	return new Promise(function(resolve) {
-	    setTimeout(resolve.bind(null),t);
-	});
-    }
-
-    // regular input with a forced delay ...
-    input_delay(args, util) {
-	return this.delay(1000).then(() => {
-	    return this.input(args, util);
-	});
     }
 
     hatHandler() {
