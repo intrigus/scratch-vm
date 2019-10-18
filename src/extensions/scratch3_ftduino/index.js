@@ -294,7 +294,8 @@ class Scratch3FtduinoBlocks {
 
 	return new Promise(resolve => {
 	    // it must never happend that wait4input_resolve is set
-	    // at this time.
+	    // at this time as this means that the previous request has
+	    // not been resolved.
 	    if(this.expect.wait4input_resolve != undefined)
 		console.log("COLLISION!");
 	    
@@ -421,27 +422,32 @@ class Scratch3FtduinoBlocks {
 
 	if(this.expect !== undefined) {
 	    this.cancelReplyTimeout();
-	    
-	    // check if the result contains the expected keys
-	    var reply_ok = true;
-	    var keys = Object.keys(this.expect.entries);
-	    for(var i=0; i < keys.length ; i++)
-		if(result[keys[i]].toLowerCase() !==
-		   this.expect.entries[keys[i]].toLowerCase()) {
-		    console.log("Missing expected reply parameter:",
+
+	    // there _must_ be some entries in this.expect
+	    if(this.expect.entries ===  undefined)
+		console.log("No entries???");
+	    else {
+		// check if the result contains the expected keys
+		var reply_ok = true;
+		var keys = Object.keys(this.expect.entries);
+		for(var i=0; i < keys.length ; i++)
+		    if(result[keys[i]].toLowerCase() !==
+		       this.expect.entries[keys[i]].toLowerCase()) {
+			console.log("Missing expected reply parameter:",
 				keys[i], ":", this.expect.entries["expect"][keys[i]], "-",msg);
+			reply_ok = false;
+		    }
+	    
+		if(result[this.expect.value] === undefined)
 		    reply_ok = false;
-		}
 	    
-	    if(result[this.expect.value] === undefined)
-		reply_ok = false;
-	    
-	    if(reply_ok) {
-		this.expect.resolve(result[this.expect.value]);
-		if(this.expect.wait4input_resolve !== undefined) this.expect.wait4input_resolve();
-		this.expect = undefined;
-	    } else
-		console.log("reply expect failed");
+		if(reply_ok) {
+		    this.expect.resolve(result[this.expect.value]);
+		    if(this.expect.wait4input_resolve !== undefined) this.expect.wait4input_resolve();
+		    this.expect = undefined;
+		} else
+		    console.log("reply expect failed");
+	    }
 	}
     }
 
@@ -743,7 +749,9 @@ class Scratch3FtduinoBlocks {
     }
 
     hatHandler() {
-	// decrease current timeout counter
+	// decrease current timeout counter. This is used since we are
+	// not notified when a hat is being removed. This counter running
+	// down means that the hat has probably been deleted fromt he workspace.
 	this.hat.input[this.hat.next] = this.hat.input[this.hat.next] - 1;
 	if(!this.hat.input[this.hat.next]) {
 	    delete this.hat.input[this.hat.next];
