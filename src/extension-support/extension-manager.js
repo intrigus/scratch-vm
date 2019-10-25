@@ -23,6 +23,7 @@ const builtinExtensions = {
     ev3: () => require('../extensions/scratch3_ev3'),
     makeymakey: () => require('../extensions/scratch3_makeymakey'),
     ftduino: () => require('../extensions/scratch3_ftduino'),
+    ftduinoOffline: () => require('../extensions/scratch3_ftduino-offline'),
     boost: () => require('../extensions/scratch3_boost'),
     gdxfor: () => require('../extensions/scratch3_gdx_for')
 };
