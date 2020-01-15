@@ -50,6 +50,13 @@ const EXTENSION_ID = 'ftduinoOffline';
 
 
 
+const noTopLevelHatBlock = "Der Sketch benötigt einen Hat-Block";
+const tooManyTopLevelHatBlock = "Der Sketch darf nur genau einen Hat-Block enthalten";
+const sketchIsTooBig = "Der Sketch ist zu groß für den ftduino.\nVersuche die benötigten Blöcke zu reduzieren";
+const uploadError = "Der Sketch konnte nicht hochgeladen werden. Prüfe die Verbindung und versuche es erneut"
+const blockNotSupportedError = "Der Sketch enthält einen Block, der nicht vom ftduino unterstützt wird"
+const internalError = "Interner Fehler";
+
 class Scratch3Offline {
 
 	onConnectClicked() {
@@ -138,6 +145,24 @@ class Scratch3Offline {
 		console.log(serializedJsonString)
 	}
 
+	extractMatchingErrorMessage(errorMessage) {
+		if (errorMessage.includes("ScratchNoTopLevelHatBlockException")) {
+			return noTopLevelHatBlock;
+		} else if (errorMessage.includes("ScratchTooManyTopLevelHatBlocksException")) {
+			return tooManyTopLevelHatBlock;
+		} else if (errorMessage.includes("Sketch too big")) {
+			return sketchIsTooBig;
+		} else if (errorMessage.includes("Error during Upload")) {
+			return uploadError;		
+		} else if (errorMessage.includes("Cannot locate class")) {
+			// this check is not a good check. It might lead to a false positive when the user
+			// somehow uses a legitmite class that can't be found...
+			return blockNotSupportedError;
+		} else {
+			return internalError;
+		}
+	}
+
 	onUploadClicked() {
 		console.log("Woot woot. Uploading")
 		let self = this;
@@ -159,7 +184,14 @@ class Scratch3Offline {
 				alert("Interner Fehler");
 			} else if (jsonResponse.status != "SUCCESS") {
 				console.log(jsonResponse.errorMessage);
-				alert("Interner Fehler");
+				let appropriateErrorMessage = self.extractMatchingErrorMessage(jsonResponse.errorMessage);
+				// in both cases the memory usage is sent despite there being an error
+				if (appropriateErrorMessage === sketchIsTooBig || appropriateErrorMessage === uploadError) {
+					let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
+					console.log(memoryUsage);
+					self.memoryMeter.setValue(memoryUsage);
+				}
+				alert(appropriateErrorMessage);
 			} else if (jsonResponse.status == "SUCCESS") {
 				console.log(jsonResponse.result)
 				let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
