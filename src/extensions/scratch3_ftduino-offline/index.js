@@ -100,11 +100,11 @@ class Scratch3Offline {
 						alert("Interner Fehler");
 					} else {
 						if (serialDevices.length > 0) {
-							self.buttons[1].setIcon(ftduinoConnectedIcon);
-							self.buttons[1].setTitle("Verbunden");
+							this.buttons[1].setIcon(ftduinoConnectedIcon);
+							this.buttons[1].setTitle("Verbunden");
 							console.log(serialDevices);
-							self.serialDevice = serialDevices[0];
-							console.log("Picked " + self.serialDevice);
+							this.serialDevice = serialDevices[0];
+							console.log("Picked " + this.serialDevice);
 						} else {
 							alert("Es wurde kein ftDuino erkannt");
 						}
@@ -193,7 +193,6 @@ class Scratch3Offline {
 
 	onUploadClicked() {
 		console.log("Woot woot. Uploading")
-		let self = this;
 		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
 
 		if (this.serialDevice === null || this.serialDevice === undefined) {
@@ -230,19 +229,19 @@ class Scratch3Offline {
 			}).then(jsonResponse => {
 				if (jsonResponse.status != "SUCCESS") {
 					console.log(jsonResponse.errorMessage);
-					let appropriateErrorMessage = self.extractMatchingErrorMessage(jsonResponse.errorMessage);
+					let appropriateErrorMessage = this.extractMatchingErrorMessage(jsonResponse.errorMessage);
 					// in both cases the memory usage is sent despite there being an error
 					if (appropriateErrorMessage === sketchIsTooBig || appropriateErrorMessage === uploadError) {
-						let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
+						let memoryUsage = this.extractMemoryUsage(jsonResponse.result);
 						console.log(memoryUsage);
-						self.memoryMeter.setValue(memoryUsage);
+						this.memoryMeter.setValue(memoryUsage);
 					}
 					alert(appropriateErrorMessage);
 				} else if (jsonResponse.status == "SUCCESS") {
 					console.log(jsonResponse.result)
-					let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
+					let memoryUsage = this.extractMemoryUsage(jsonResponse.result);
 					console.log(memoryUsage);
-					self.memoryMeter.setValue(memoryUsage);
+					this.memoryMeter.setValue(memoryUsage);
 					alert("Erfolgreich hochgeladen");
 				}
 			});
