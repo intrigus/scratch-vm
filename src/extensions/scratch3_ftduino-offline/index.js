@@ -61,71 +61,85 @@ class Scratch3Offline {
 
 	onConnectClicked() {
 		console.log("Woot woot. Connecting")
-		let self = this;
 
-		function reqListener() {
-			console.log(this.responseText);
-			let responseParsingFailed;
-			let jsonResponse;
-			try {
-				jsonResponse = JSON.parse(this.responseText);
-			} catch (e) {
-				console.log(e);
-				responseParsingFailed = true;
-			}
-			console.log(jsonResponse);
+		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
+		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
+		// and fail again, as the then clause has to fail as it did not receive valid data...
+		let connectionFailed = false;
 
-			if (responseParsingFailed || jsonResponse === null) {
-				alert("Interner Fehler");
-			} else if (jsonResponse.status != "SUCCESS") {
-				console.log(jsonResponse.errorMessage);
-				alert("Interner Fehler");
-			} else if (jsonResponse.status == "SUCCESS") {
-				let parsingFailed;
-				let serialDevices;
-				try {
-					console.log(jsonResponse.result);
-					serialDevices = JSON.parse(jsonResponse.result);
-				} catch (e) {
-					console.log(e);
-					parsingFailed = true;
-				}
-				if(parsingFailed || serialDevices === null) {
+		fetch('http://localhost:8888/ftduinos', {
+			method: 'POST'
+		})
+			.catch((error) => {
+				console.log(error);
+				alert("Es konnte keine Verbindung zum lokalen Server aufgebaut werden");
+				connectionFailed = true;
+				throw error;
+			})
+			.then(response => response.json())
+			.catch((error) => {
+				if (connectionFailed) return;
+				console.log(error);
+				alert("Die Antwort des Servers konnte nicht ins korrekte Format umgewandelt werden");
+				throw error;
+			}).then(jsonResponse => {
+				if (jsonResponse.status != "SUCCESS") {
+					console.log(jsonResponse.errorMessage);
 					alert("Interner Fehler");
-				} else {
-					if(serialDevices.length > 0) {
-						self.buttons[1].setIcon(ftduinoConnectedIcon);
-						self.buttons[1].setTitle("Verbunden");
-						console.log(serialDevices);
-						self.serialDevice = serialDevices[0];
-						console.log("Picked " + self.serialDevice);
+				} else if (jsonResponse.status == "SUCCESS") {
+					let parsingFailed;
+					let serialDevices;
+					try {
+						console.log(jsonResponse.result);
+						serialDevices = JSON.parse(jsonResponse.result);
+					} catch (e) {
+						console.log(e);
+						parsingFailed = true;
+					}
+					if (parsingFailed || serialDevices === null) {
+						alert("Interner Fehler");
 					} else {
-						alert("Es wurde kein ftDuino erkannt");
+						if (serialDevices.length > 0) {
+							self.buttons[1].setIcon(ftduinoConnectedIcon);
+							self.buttons[1].setTitle("Verbunden");
+							console.log(serialDevices);
+							self.serialDevice = serialDevices[0];
+							console.log("Picked " + self.serialDevice);
+						} else {
+							alert("Es wurde kein ftDuino erkannt");
+						}
 					}
 				}
-			}
-		}
-
-		let oReq = new XMLHttpRequest();
-		oReq.addEventListener("load", reqListener);
-		oReq.open("POST", "http://localhost:8888/ftduinos");
-		// TODO handle errors
-		oReq.send("");
+			})
 	}
 
 	onCompileClicked() {
 		console.log("Woot woot. Compiling")
 		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
 
-		function reqListener() {
-			console.log(this.responseText);
-		}
+		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
+		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
+		// and fail again, as the then clause has to fail as it did not receive valid data...
+		let connectionFailed = false;
 
-		let oReq = new XMLHttpRequest();
-		oReq.addEventListener("load", reqListener);
-		oReq.open("POST", "http://localhost:8888/compile");
-		// TODO handle errors
-		oReq.send(serializedJsonString);
+		fetch('http://localhost:8888/compile', {
+			method: 'POST',
+			body: serializedJsonString
+		})
+			.catch((error) => {
+				console.log(error);
+				alert("Es konnte keine Verbindung zum lokalen Server aufgebaut werden");
+				connectionFailed = true;
+				throw error;
+			})
+			.then(response => response.json())
+			.catch((error) => {
+				if (connectionFailed) return;
+				console.log(error);
+				alert("Die Antwort des Servers konnte nicht ins korrekte Format umgewandelt werden");
+				throw error;
+			}).then(jsonResponse => console.log);
+
 		console.log(serializedJsonString)
 	}
 
@@ -133,15 +147,29 @@ class Scratch3Offline {
 		console.log("Woot woot. Converting")
 		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
 
-		function reqListener() {
-			console.log(this.responseText);
-		}
+		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
+		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
+		// and fail again, as the then clause has to fail as it did not receive valid data...
+		let connectionFailed = false;
 
-		let oReq = new XMLHttpRequest();
-		oReq.addEventListener("load", reqListener);
-		oReq.open("POST", "http://localhost:8888/convert");
-		// TODO handle errors
-		oReq.send(serializedJsonString);
+		fetch('http://localhost:8888/convert', {
+			method: 'POST',
+			body: serializedJsonString
+		})
+			.catch((error) => {
+				console.log(error);
+				alert("Es konnte keine Verbindung zum lokalen Server aufgebaut werden");
+				connectionFailed = true;
+				throw error;
+			})
+			.then(response => response.json())
+			.catch((error) => {
+				if (connectionFailed) return;
+				console.log(error);
+				alert("Die Antwort des Servers konnte nicht ins korrekte Format umgewandelt werden");
+				throw error;
+			}).then(jsonResponse => console.log);
+
 		console.log(serializedJsonString)
 	}
 
@@ -153,7 +181,7 @@ class Scratch3Offline {
 		} else if (errorMessage.includes("Sketch too big")) {
 			return sketchIsTooBig;
 		} else if (errorMessage.includes("Error during Upload")) {
-			return uploadError;		
+			return uploadError;
 		} else if (errorMessage.includes("Cannot locate class")) {
 			// this check is not a good check. It might lead to a false positive when the user
 			// somehow uses a legitmite class that can't be found...
@@ -168,53 +196,57 @@ class Scratch3Offline {
 		let self = this;
 		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
 
-		function reqListener() {
-			console.log(this.responseText);
-			let responseParsingFailed;
-			let jsonResponse;
-			try {
-				jsonResponse = JSON.parse(this.responseText);
-			} catch (e) {
-				console.log(e);
-				responseParsingFailed = true;
-			}
-			console.log(jsonResponse);
-
-			if (responseParsingFailed || jsonResponse === null) {
-				alert("Interner Fehler");
-			} else if (jsonResponse.status != "SUCCESS") {
-				console.log(jsonResponse.errorMessage);
-				let appropriateErrorMessage = self.extractMatchingErrorMessage(jsonResponse.errorMessage);
-				// in both cases the memory usage is sent despite there being an error
-				if (appropriateErrorMessage === sketchIsTooBig || appropriateErrorMessage === uploadError) {
-					let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
-					console.log(memoryUsage);
-					self.memoryMeter.setValue(memoryUsage);
-				}
-				alert(appropriateErrorMessage);
-			} else if (jsonResponse.status == "SUCCESS") {
-				console.log(jsonResponse.result)
-				let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
-				console.log(memoryUsage);
-				self.memoryMeter.setValue(memoryUsage);
-				alert("Erfolgreich hochgeladen");
-			}
-		}
-
 		if (this.serialDevice === null || this.serialDevice === undefined) {
 			alert("Es ist kein ftDuino verbunden");
 			return;
 		}
-
-		let oReq = new XMLHttpRequest();
-		oReq.addEventListener("load", reqListener);
-		oReq.open("POST", "http://localhost:8888/upload");
-		// TODO handle errors
-		oReq.send(JSON.stringify({
+		let requestBody = JSON.stringify({
 			code: serializedJsonString,
 			serialPort: this.serialDevice.address
 			// TODO select serial port
-		}));
+		});
+
+		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
+		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
+		// and fail again, as the then clause has to fail as it did not receive valid data...
+		let connectionFailed = false;
+
+		fetch('http://localhost:8888/upload', {
+			method: 'POST',
+			body: requestBody
+		})
+			.catch((error) => {
+				console.log(error);
+				alert("Es konnte keine Verbindung zum lokalen Server aufgebaut werden");
+				connectionFailed = true;
+				throw error;
+			})
+			.then(response => response.json())
+			.catch((error) => {
+				if (connectionFailed) return;
+				console.log(error);
+				alert("Die Antwort des Servers konnte nicht ins korrekte Format umgewandelt werden");
+				throw error;
+			}).then(jsonResponse => {
+				if (jsonResponse.status != "SUCCESS") {
+					console.log(jsonResponse.errorMessage);
+					let appropriateErrorMessage = self.extractMatchingErrorMessage(jsonResponse.errorMessage);
+					// in both cases the memory usage is sent despite there being an error
+					if (appropriateErrorMessage === sketchIsTooBig || appropriateErrorMessage === uploadError) {
+						let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
+						console.log(memoryUsage);
+						self.memoryMeter.setValue(memoryUsage);
+					}
+					alert(appropriateErrorMessage);
+				} else if (jsonResponse.status == "SUCCESS") {
+					console.log(jsonResponse.result)
+					let memoryUsage = self.extractMemoryUsage(jsonResponse.result);
+					console.log(memoryUsage);
+					self.memoryMeter.setValue(memoryUsage);
+					alert("Erfolgreich hochgeladen");
+				}
+			});
+
 		console.log(serializedJsonString)
 	}
 
@@ -224,17 +256,17 @@ class Scratch3Offline {
 		let memoryUsage = 0;
 
 		while ((m = regex.exec(string)) !== null) {
-	    	// This is necessary to avoid infinite loops with zero-width matches
-	    	if (m.index === regex.lastIndex) {
-	        	regex.lastIndex++;
-    		}
-	    
-    		// The result can be accessed through the `m`-variable.
-    		m.forEach((match, groupIndex) => {
-    			if(groupIndex == 1) {
-    				memoryUsage = match;
-    			}
-		    });
+			// This is necessary to avoid infinite loops with zero-width matches
+			if (m.index === regex.lastIndex) {
+				regex.lastIndex++;
+			}
+
+			// The result can be accessed through the `m`-variable.
+			m.forEach((match, groupIndex) => {
+				if (groupIndex == 1) {
+					memoryUsage = match;
+				}
+			});
 		}
 		return memoryUsage;
 	}
