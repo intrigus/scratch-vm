@@ -115,7 +115,7 @@ class Scratch3Offline {
 
 	onCompileClicked() {
 		console.log("Woot woot. Compiling")
-		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
+		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime, this.runtime.getEditingTarget().id))
 
 		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
 		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
@@ -145,7 +145,7 @@ class Scratch3Offline {
 
 	onConvertClicked() {
 		console.log("Woot woot. Converting")
-		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
+		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime, this.runtime.getEditingTarget().id))
 
 		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
 		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
@@ -193,7 +193,7 @@ class Scratch3Offline {
 
 	onUploadClicked() {
 		console.log("Woot woot. Uploading")
-		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime))
+		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime, this.runtime.getEditingTarget().id))
 
 		if (this.serialDevice === null || this.serialDevice === undefined) {
 			alert("Es ist kein ftDuino verbunden");
