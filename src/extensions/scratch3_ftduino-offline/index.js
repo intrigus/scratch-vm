@@ -46,6 +46,7 @@ const FTDUINO_OFFLINE_CONVERT_BUTTON_ID = "ftDuino_offline_convert_button";
 const FTDUINO_OFFLINE_UPLOAD_BUTTON_ID = "ftDuino_offline_upload_button";
 const FTDUINO_OFFLINE_MEMORY_METER_ID = "ftDuino_offline_memory_meter";
 const FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL = 1000;
+const FTDUINO_OFFLINE_CHECK_USED_MEMORY = 10000;
 const EXTENSION_ID = 'ftduinoOffline';
 
 
@@ -250,6 +251,35 @@ class Scratch3Offline {
 		console.log(serializedJsonString)
 	}
 
+	checkMemoryStatus() {
+		console.log("Checking memory status")
+		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime, this.runtime.getEditingTarget().id))
+
+		// Ideally I would not need this, but I did not find a way to exit from a promise chain early.
+		// I.e. If I fail in the first catch, it would happily continue executing the next then clause
+		// and fail again, as the then clause has to fail as it did not receive valid data...
+		let connectionFailed = false;
+
+		fetch('http://localhost:8888/compile', {
+			method: 'POST',
+			body: serializedJsonString
+		}).then(response => response.json()).then(jsonResponse => {
+			if (jsonResponse.status != "SUCCESS") {
+				console.log(jsonResponse.errorMessage);
+				let memoryUsage = this.extractMemoryUsage(jsonResponse.result);
+				console.log(memoryUsage);
+				this.memoryMeter.setValue(memoryUsage);
+			} else if (jsonResponse.status == "SUCCESS") {
+				console.log(jsonResponse.result)
+				let memoryUsage = this.extractMemoryUsage(jsonResponse.result);
+				console.log(memoryUsage);
+				this.memoryMeter.setValue(memoryUsage);
+			}
+		}).catch(console.log);
+
+		console.log(serializedJsonString)
+	}
+
 	checkDeviceConnectionStatus() {
 		console.log("Checking connection status")
 
@@ -333,6 +363,7 @@ class Scratch3Offline {
 		this.buttons = this.initButtons();
 		this.memoryMeter = this.initMemoryMeter();
 		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
+		setInterval(() => this.checkMemoryStatus(), FTDUINO_OFFLINE_CHECK_USED_MEMORY);
 	}
 
 	/**
