@@ -45,6 +45,7 @@ const FTDUINO_OFFLINE_COMPILE_BUTTON_ID = "ftDuino_offline_compile_button";
 const FTDUINO_OFFLINE_CONVERT_BUTTON_ID = "ftDuino_offline_convert_button";
 const FTDUINO_OFFLINE_UPLOAD_BUTTON_ID = "ftDuino_offline_upload_button";
 const FTDUINO_OFFLINE_MEMORY_METER_ID = "ftDuino_offline_memory_meter";
+const FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL = 1000;
 const EXTENSION_ID = 'ftduinoOffline';
 
 
@@ -249,6 +250,50 @@ class Scratch3Offline {
 		console.log(serializedJsonString)
 	}
 
+	checkDeviceConnectionStatus() {
+		console.log("Checking connection status")
+
+		fetch('http://localhost:8888/ftduinosAsync', {
+			method: 'POST'
+		})
+			.then(response => response.json()).then(jsonResponse => {
+				if (jsonResponse.status != "SUCCESS") {
+					console.log(jsonResponse.errorMessage);
+				} else if (jsonResponse.status == "SUCCESS") {
+					let parsingFailed;
+					let serialDevices;
+					try {
+						console.log(jsonResponse.result);
+						serialDevices = JSON.parse(jsonResponse.result);
+					} catch (e) {
+						console.log(e);
+						parsingFailed = true;
+					}
+					if (parsingFailed || serialDevices === null) {
+						return;
+					} else {
+						if (this.serialDevice === undefined) {
+							return;
+						}
+
+						let isConnected = false;
+						serialDevices.forEach(device => {
+							console.log(device);
+							console.log(this.serialDevice);
+							if (device.address == this.serialDevice.address) {
+								isConnected = true;
+							}
+						});
+						if (!isConnected) {
+							this.serialDevice = undefined;
+							this.buttons[1].setIcon(ftduinoDisconnectedIcon);
+							this.buttons[1].setTitle("Mit ftDuino verbinden");
+						}
+					}
+				}
+			}).catch(console.log);
+	}
+
 	extractMemoryUsage(string) {
 		const regex = /Sketch\ uses\ (\d*)\ bytes.*/gm;
 		let m;
@@ -287,6 +332,7 @@ class Scratch3Offline {
 		this.runtime = runtime;
 		this.buttons = this.initButtons();
 		this.memoryMeter = this.initMemoryMeter();
+		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
 	}
 
 	/**
