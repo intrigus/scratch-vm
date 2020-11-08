@@ -45,6 +45,7 @@ const FTDUINO_OFFLINE_COMPILE_BUTTON_ID = "ftDuino_offline_compile_button";
 const FTDUINO_OFFLINE_CONVERT_BUTTON_ID = "ftDuino_offline_convert_button";
 const FTDUINO_OFFLINE_UPLOAD_BUTTON_ID = "ftDuino_offline_upload_button";
 const FTDUINO_OFFLINE_MEMORY_METER_ID = "ftDuino_offline_memory_meter";
+const FTDUINO_CONNECT_BUTTON_ID = "ftDuino_connect_button";
 const FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL = 1000;
 const FTDUINO_OFFLINE_CHECK_USED_MEMORY = 10000;
 const EXTENSION_ID = 'ftduinoOffline';
@@ -358,12 +359,24 @@ class Scratch3Offline {
 		return [ /*compileButton, convertButton, */ uploadButton, connectButton];
 	}
 
+	/**
+	 * Removes/hides the original ftduino connect button.
+	 */
+	removeOriginalFtduinoButton() {
+		let ftduinoOriginalConnectButton = document.getElementById(FTDUINO_CONNECT_BUTTON_ID);
+		if (ftduinoOriginalConnectButton) {
+			ftduinoOriginalConnectButton.style.display = 'none';
+			clearInterval(this.removeOriginalFtduinoButtonCheck);
+		}
+	}
+
 	constructor(runtime) {
 		this.runtime = runtime;
 		this.buttons = this.initButtons();
 		this.memoryMeter = this.initMemoryMeter();
 		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
 		setInterval(() => this.checkMemoryStatus(), FTDUINO_OFFLINE_CHECK_USED_MEMORY);
+		this.removeOriginalFtduinoButtonCheck = setInterval(() => this.removeOriginalFtduinoButton(), 1000);
 	}
 
 	/**
