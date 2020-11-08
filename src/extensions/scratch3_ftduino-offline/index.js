@@ -370,6 +370,51 @@ class Scratch3Offline {
 		}
 	}
 
+	addTemporaryStyleSheetToHighlightSupportedBlocks() {
+		const style = document.createElement('style');
+		document.head.append(style);
+		style.textContent = `
+		g .blocklyBlockBackground {
+			opacity: 40%; 
+		}
+
+		g:where(
+		[data-id="event_whenflagclicked"],
+		[data-id="control_wait"],
+		[data-id="control_repeat"],
+		[data-id="forever"],
+		[data-id="control_if"],
+		[data-id="control_if_else"],
+		[data-id="wait_until"],
+		[data-id="repeat_until"],
+		[data-id="operator_add"],
+		[data-id="operator_subtract"],
+		[data-id="operator_multiply"],
+		[data-id="operator_divide"],
+		[data-id="operator_random"],
+		[data-id="operator_gt"],
+		[data-id="operator_lt"],
+		[data-id="operator_equals"],
+		[data-id="operator_and"],
+		[data-id="operator_or"],
+		[data-id="operator_not"],
+		[data-id="ftduino_led"],
+		[data-id="ftduino_input"],
+		[data-id="ftduino_output"],
+		[data-id="ftduino_when_input"],
+		[data-id="ftduino_input_analog"],
+		[data-id="ftduino_output_analog"],
+		[data-id="ftduino_motor"],
+		[data-id="ftduino_motor_stop"],
+		[data-id="ftduino_input_counter"],
+		[data-id="ftduino_clear_counter"]
+		) 
+
+		.blocklyBlockBackground {
+			opacity: 100%; 
+		}`;
+	}
+
 	constructor(runtime) {
 		this.runtime = runtime;
 		this.buttons = this.initButtons();
@@ -377,6 +422,7 @@ class Scratch3Offline {
 		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
 		setInterval(() => this.checkMemoryStatus(), FTDUINO_OFFLINE_CHECK_USED_MEMORY);
 		this.removeOriginalFtduinoButtonCheck = setInterval(() => this.removeOriginalFtduinoButton(), 1000);
+		this.addTemporaryStyleSheetToHighlightSupportedBlocks();
 	}
 
 	/**
