@@ -43,7 +43,6 @@ class Meter {
 				meterElement.setAttribute("high", this.high);
 				meterElement.setAttribute("max", this.max);
 				meterElement.setAttribute("title", this.title);
-				meterElement.style.width = "unset";
 				meterElement.style.cursor = "unset"
 			} else
 				alert("ftDuino: controls-container class not found!");
