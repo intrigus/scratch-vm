@@ -417,6 +417,7 @@ class Scratch3Offline {
 		this.memoryMeter = this.initMemoryMeter();
 		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
 		setInterval(() => this.checkMemoryStatus(), FTDUINO_OFFLINE_CHECK_USED_MEMORY);
+		this.removeOriginalFtduinoButton();
 		this.removeOriginalFtduinoButtonCheck = setInterval(() => this.removeOriginalFtduinoButton(), 1000);
 		this.addTemporaryStyleSheetToHighlightSupportedBlocks();
 	}
