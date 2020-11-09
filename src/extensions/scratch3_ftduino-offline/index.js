@@ -196,6 +196,7 @@ class Scratch3Offline {
 
 	onUploadClicked() {
 		console.log("Woot woot. Uploading")
+		this.isUploading = true;
 		let serializedJsonString = JSON.stringify(Serialization.serialize(this.runtime, this.runtime.getEditingTarget().id))
 
 		if (this.serialDevice === null || this.serialDevice === undefined) {
@@ -250,6 +251,7 @@ class Scratch3Offline {
 			});
 
 		console.log(serializedJsonString)
+		this.isUploading = false;
 	}
 
 	checkMemoryStatus() {
@@ -306,6 +308,10 @@ class Scratch3Offline {
 						if (this.serialDevice === undefined) {
 							return;
 						}
+						// When uploading, serial contact can briefly get lost, so ignore it!
+						if (this.isUploading) {
+							return;
+						}
 
 						let isConnected = false;
 						serialDevices.forEach(device => {
@@ -313,9 +319,15 @@ class Scratch3Offline {
 							console.log(this.serialDevice);
 							if (device.address == this.serialDevice.address) {
 								isConnected = true;
+								this.notConnectedCount = 0;
 							}
 						});
 						if (!isConnected) {
+							this.notConnectedCount++;
+						}
+						// If it is not connected 3 times (= 3 seconds) we consider the connection lost
+						if (this.notConnectedCount >= 3) {
+
 							this.serialDevice = undefined;
 							this.buttons[1].setIcon(ftduinoDisconnectedIcon);
 							this.buttons[1].setTitle("Mit ftDuino verbinden");
@@ -415,6 +427,7 @@ class Scratch3Offline {
 		this.runtime = runtime;
 		this.buttons = this.initButtons();
 		this.memoryMeter = this.initMemoryMeter();
+		this.notConnectedCount = 0;
 		setInterval(() => this.checkDeviceConnectionStatus(), FTDUINO_OFFLINE_CHECK_CONNECTION_INTERVAL);
 		setInterval(() => this.checkMemoryStatus(), FTDUINO_OFFLINE_CHECK_USED_MEMORY);
 		this.removeOriginalFtduinoButton();
